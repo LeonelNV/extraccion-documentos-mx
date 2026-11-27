@@ -222,8 +222,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if not violations:
         return 0
+    # En Windows, si la salida va a otro proceso (pre-commit), Python usaría cp1252
+    # y los acentos llegarían mal; pre-commit y la terminal esperan UTF-8.
     if hasattr(sys.stderr, "reconfigure"):
-        sys.stderr.reconfigure(errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     print(title, file=sys.stderr)
     for v in sorted(set(violations), key=lambda v: v.path):
         print(f"  - {v.path}: {v.reason}", file=sys.stderr)
