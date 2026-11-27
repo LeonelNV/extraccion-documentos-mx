@@ -16,7 +16,7 @@ Generado por `make eval`. No editar a mano.
 
 ## Parser de texto: curp
 
-48 documentos digitales · 100.0% con todos los campos correctos · latencia p50 160 ms, p95 194 ms · costo $0
+48 documentos digitales · 100.0% con todos los campos correctos · latencia p50 253 ms, p95 285 ms · costo $0
 
 | Campo | n | Exactitud | CER |
 |---|---:|---:|---:|
@@ -24,14 +24,10 @@ Generado por `make eval`. No editar a mano.
 | nombre | 48 | 100.0% | 0.000 |
 | apellido_paterno | 48 | 100.0% | 0.000 |
 | apellido_materno | 48 | 100.0% | 0.000 |
-| fecha_nacimiento | 48 | 100.0% | 0.000 |
-| sexo | 48 | 100.0% | 0.000 |
-| entidad_nacimiento | 48 | 100.0% | 0.000 |
-| nacionalidad | 48 | 100.0% | 0.000 |
 
 ## Parser de texto: csf
 
-53 documentos digitales · 100.0% con todos los campos correctos · latencia p50 287 ms, p95 321 ms · costo $0
+53 documentos digitales · 100.0% con todos los campos correctos · latencia p50 284 ms, p95 320 ms · costo $0
 
 | Campo | n | Exactitud | CER |
 |---|---:|---:|---:|
