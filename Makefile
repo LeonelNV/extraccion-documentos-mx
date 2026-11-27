@@ -3,7 +3,7 @@
 # las muestra `make help`.
 
 .DEFAULT_GOAL := help
-.PHONY: help install lint format test check-data ci sepomex verificar-claves synth synth-samples eval api
+.PHONY: help install lint format test check-data ci sepomex verificar-claves synth synth-samples eval eval-private api
 
 help: ## Muestra esta ayuda
 	@uv run --no-project python scripts/make_help.py Makefile
@@ -40,9 +40,11 @@ synth: ## Genera el dataset sintético en data/synthetic/ (requiere make sepomex
 synth-samples: ## Regenera las muestras versionadas de data/synthetic/samples/
 	uv run python -m synth --samples
 
-eval: ## Evalúa los extractores y escribe reports/ (fase 4 en adelante)
-	@echo Pendiente: se implementa a partir de la fase 4.
-	@exit 1
+eval: ## Evalúa sobre el split test del dataset sintético y escribe reports/
+	uv run python eval/evaluate.py --split test
+
+eval-private: ## Evalúa con tus documentos reales de data/real/ (solo imprime conteos)
+	uv run python eval/eval_private.py
 
 api: ## Levanta la API de FastAPI (fase 8)
 	@echo Pendiente: se implementa en la fase 8.

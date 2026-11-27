@@ -38,8 +38,8 @@ Los umbrales (similitud de nombres 0.90, de colonia y municipio 0.85, antigüeda
 | Nombres y claves numéricas de las 32 entidades | Catálogo de SEPOMEX (descarga del 2026-11-26) | Verificado por prueba automática contra el catálogo |
 | Claves de dos letras de las entidades en la CURP (AS, BC… NE) | Anexo 03 de las Reglas, **no publicado**; se usan las de uso público | Sin verificar contra el anexo |
 | Catálogo de palabras altisonantes de la CURP | Anexo 01 de las Reglas, **no publicado**; se usa la lista de uso público. PEDO y JOTO están confirmadas por los ejemplos de las Reglas | Parcial |
-| Dígito verificador de la CURP | Las Reglas dicen que lo asigna "un algoritmo", sin publicarlo; se usa el algoritmo de uso público | Sin verificar con claves reales |
-| Reglas del RFC: letras, homoclave, dígito verificador, palabras inconvenientes | El SAT no las publica en su sitio; se usa la descripción de uso público derivada de un documento del SAT entregado por solicitud de acceso a la información | Sin verificar con claves reales |
+| Dígito verificador de la CURP | Las Reglas dicen que lo asigna "un algoritmo", sin publicarlo; se usa el algoritmo de uso público | Verificado con una CURP real (2026-11-26, `make verificar-claves`) |
+| Reglas del RFC: letras, homoclave, dígito verificador, palabras inconvenientes | El SAT no las publica en su sitio; se usa la descripción de uso público derivada de un documento del SAT entregado por solicitud de acceso a la información | Dígito verificador: verificado con un RFC real (2026-11-27). Letras y homoclave: sin verificar; solo se usan para generar datos sintéticos |
 | Formato del catálogo de códigos postales | [Correos de México](https://www.correosdemexico.gob.mx/SSLServicios/ConsultaCP/CodigoPostal_Exportar.aspx); formato comprobado con la descarga | Verificado |
 
 ### Contradicciones en los ejemplos oficiales
@@ -51,7 +51,7 @@ En el punto 1.16 de las Reglas, dos ejemplos ("MARIA JOSE…" y "JOSE MARIA…")
 - **Palabras altisonantes:** si la CURP trae "X" en la posición 2 y las otras tres letras coinciden con el nombre, se acepta aunque la palabra no esté en nuestra lista.
 - **CURP contra RFC:** una "X" en cualquiera de las dos claves se acepta contra cualquier letra, porque RENAPO y el SAT sustituyen cosas distintas (Ñ, palabras inconvenientes). Aun así, las reglas para una persona con un solo apellido difieren entre ambos, por eso una diferencia es advertencia y no error.
 - **Homoclave del RFC:** solo se valida el dígito verificador. Los dos caracteres de homonimia los asigna el SAT y no se pueden recalcular con certeza.
-- **Dígitos verificadores:** se pueden comprobar con claves reales sin que salgan de tu máquina (siguiente sección).
+- **Dígitos verificadores:** se comprobaron con una CURP y un RFC reales del responsable del proyecto, sin que salieran de su máquina (siguiente sección). Un algoritmo equivocado acertaría ambas por azar con probabilidad de 1/10 × 1/11, menos del 1%. Con más claves, la evidencia sería más fuerte.
 
 ## Verificar los dígitos verificadores con claves reales
 
