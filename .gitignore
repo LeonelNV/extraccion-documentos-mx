@@ -16,6 +16,8 @@ data/synthetic/*
 models/
 checkpoints/
 mlruns/
+# Detalle de cada corrida de make eval (el resumen en reports/resultados.* sí se versiona)
+reports/runs/
 wandb/
 *.safetensors
 *.ckpt
