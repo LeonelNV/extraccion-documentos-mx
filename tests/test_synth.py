@@ -194,6 +194,28 @@ def test_la_marca_de_agua_no_contamina_la_capa_de_texto(catalogo: SepomexCatalog
         document.close()
 
 
+def test_curp_con_la_estructura_de_la_constancia_real(catalogo: SepomexCatalog) -> None:
+    """Como la real: el título es imagen, el nombre va completo en un renglón y no imprime
+    sexo, fecha ni entidad de nacimiento ni nacionalidad. El parser divide el nombre y
+    deduce el resto de la CURP."""
+    from docextract.parsers import extract_text_route
+    from docextract.parsers.base import Confianza
+
+    for template, rendered in _renders(catalogo):
+        if template != curp.TEMPLATE:
+            continue
+        text = _pdf_text(rendered.pdf)
+        assert "CONSTANCIA DE LA CLAVE" not in text.upper()
+        for etiqueta in ("Sexo", "Fecha de nacimiento", "Nacionalidad", "Primer apellido"):
+            assert etiqueta.upper() not in text.upper(), etiqueta
+        assert not {"sexo", "fecha_nacimiento", "nacionalidad"} & set(rendered.fields)
+        campos = extract_text_route(rendered.pdf, DocType.CURP).result.fields
+        for nombre in ("curp", "nombre", "apellido_paterno", "apellido_materno"):
+            assert (campos[nombre].value or "") == rendered.fields[nombre], nombre
+        for nombre in ("sexo", "fecha_nacimiento", "entidad_nacimiento"):
+            assert campos[nombre].confidence == Confianza.DERIVADO, nombre
+
+
 def test_las_fechas_impresas_se_pueden_leer(catalogo: SepomexCatalog) -> None:
     for template, rendered in _renders(catalogo):
         for campo in ("fecha_nacimiento", "fecha_emision"):

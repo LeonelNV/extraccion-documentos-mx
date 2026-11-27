@@ -31,10 +31,7 @@
         "nombre": "TERESA",
         "apellido_paterno": "RIVERA",
         "apellido_materno": "JASSO",
-        "sexo": "MUJER",
-        "fecha_nacimiento": "19/11/1997",
-        "entidad_nacimiento": "NAYARIT",
-        "nacionalidad": "MEXICANA"
+        "entidad_registro": "NAYARIT"
       },
       "augmentation": {
         "rotation": -8.304422084071621,
