@@ -70,3 +70,18 @@ Si hay exactamente una CURP y una CSF, también compara la CURP y el nombre entr
 - No escribe nada a disco.
 
 Las pruebas lo verifican con archivos cuyo nombre contiene datos.
+
+## `make esqueleto`: la estructura de un documento real, sin sus datos
+
+Cuando un campo no se encuentra en un documento real, hace falta saber cómo está organizado
+sin ver sus datos. `make esqueleto` lee los PDFs de `data/real/` igual que el parser y muestra:
+
+- páginas, fuentes y tamaños;
+- palabras que pdfplumber juntó: una etiqueta pegada a su valor (`Postal:99999`) o dos palabras sin espacio;
+- cada línea con la posición x de cada palabra;
+- qué etiquetas encuentra el parser y si el valor va en la misma línea, abajo o vacío.
+
+Una palabra solo se muestra tal cual si es parte de una etiqueta o título conocido, con las
+mismas mayúsculas; todo lo demás se reemplaza por su forma (`JUÁREZ 12` → `AAAAAA 99`). Se ve la
+longitud de cada palabra, no su contenido. Igual que `eval-private`, no imprime nombres de
+archivo ni mensajes de error y no escribe a disco. **Revisa la salida antes de compartirla.**

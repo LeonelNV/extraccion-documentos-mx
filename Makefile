@@ -3,7 +3,7 @@
 # las muestra `make help`.
 
 .DEFAULT_GOAL := help
-.PHONY: help install lint format test check-data ci sepomex verificar-claves synth synth-samples eval eval-private api
+.PHONY: help install lint format test check-data ci sepomex verificar-claves synth synth-samples eval eval-private esqueleto api
 
 help: ## Muestra esta ayuda
 	@uv run --no-project python scripts/make_help.py Makefile
@@ -45,6 +45,9 @@ eval: ## Evalúa sobre el split test del dataset sintético y escribe reports/
 
 eval-private: ## Evalúa con tus documentos reales de data/real/ (solo imprime conteos)
 	uv run python eval/eval_private.py
+
+esqueleto: ## Estructura de tus documentos de data/real/ con los datos enmascarados
+	uv run python eval/esqueleto.py
 
 api: ## Levanta la API de FastAPI (fase 8)
 	@echo Pendiente: se implementa en la fase 8.
