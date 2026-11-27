@@ -1,0 +1,59 @@
+# ---------------------------------------------------------------------------
+# Datos: por defecto NO se versiona nada bajo data/.
+# ---------------------------------------------------------------------------
+# Documentos reales: nunca se versionan (además lo bloquea el hook de pre-commit).
+data/real/
+
+# Todo lo demás en data/ se ignora, salvo las muestras sintéticas pequeñas.
+data/*
+!data/synthetic/
+data/synthetic/*
+!data/synthetic/samples/
+
+# ---------------------------------------------------------------------------
+# Modelos, experimentos y reportes intermedios
+# ---------------------------------------------------------------------------
+models/
+checkpoints/
+mlruns/
+wandb/
+*.safetensors
+*.ckpt
+*.pt
+*.bin
+
+# ---------------------------------------------------------------------------
+# Secretos y configuración local
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+.aws/
+.claude/settings.local.json
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# ---------------------------------------------------------------------------
+# Editores y sistema operativo
+# ---------------------------------------------------------------------------
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
