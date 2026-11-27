@@ -293,3 +293,21 @@ def test_csf_rfc_invalido_y_cp_mal_formado() -> None:
     assert f["rfc"].value == malo
     assert f["rfc"].confidence == Confianza.INVALIDO
     assert f["codigo_postal"].confidence == Confianza.INVALIDO
+
+
+def test_nacionalidad_no_impresa_se_deduce_si_nacio_en_mexico() -> None:
+    f = CurpParser().parse(layout(f"Clave: {_curp()}")).fields
+    assert f["nacionalidad"].value == "MEXICANA"
+    assert f["nacionalidad"].confidence == Confianza.DERIVADO
+
+
+def test_nacionalidad_no_se_deduce_si_nacio_en_el_extranjero() -> None:
+    clave = build_curp(
+        nombre="Juan Carlos",
+        apellido_paterno="Pérez",
+        apellido_materno="López",
+        fecha_nacimiento=date(1990, 5, 17),
+        sexo="H",
+        clave_entidad="NE",
+    )
+    assert CurpParser().parse(layout(f"Clave: {clave}")).fields["nacionalidad"].value is None
