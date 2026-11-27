@@ -6,15 +6,31 @@ Extracción automática de datos de documentos oficiales mexicanos (CURP, INE, C
 
 ## Estado
 
-En desarrollo, en la **fase 3 de 9**. Ya están:
+En desarrollo, en la **fase 4 de 9**. Ya están:
 
 - el esqueleto del repo, las herramientas, la CI y los esquemas de salida (fase 1);
 - los validadores y la normalización (fase 2): CURP y RFC con dígito verificador, nombres entre documentos, domicilio contra el catálogo de SEPOMEX y antigüedad del comprobante. Las reglas, sus fuentes y lo que no se pudo verificar están en [docs/validaciones.md](docs/validaciones.md);
-- el generador de datos sintéticos (fase 3): personas ficticias con sus 4 documentos, en PDF digital, escaneo y foto de celular, con su ground truth. Hay un diseño de comprobante reservado para test. Detalles en [synth/README.md](synth/README.md).
+- el generador de datos sintéticos (fase 3): personas ficticias con sus 4 documentos, en PDF digital, escaneo y foto de celular, con su ground truth. Hay un diseño de comprobante reservado para test. Detalles en [synth/README.md](synth/README.md);
+- la ruta de texto (fase 4): router (texto vs. imagen), clasificador de texto y parsers de CURP y CSF sobre la capa de texto del PDF, sin ML. Los parsers trabajan sobre palabras con posición, así que en la fase 5 servirán también para el texto del OCR. Incluye `make eval` y `eval_private.py` para medir con documentos reales sin exponer sus datos (ver [eval/README.md](eval/README.md)).
 
 ![Documentos sintéticos de muestra](docs/img/muestras-sinteticas.jpg)
 
-Todavía no hay extractores ni resultados; las métricas se publicarán aquí cuando las genere `make eval`.
+## Resultados
+
+Generados por `make eval` sobre el split test del dataset sintético (75 personas, 300 documentos). El detalle está en [reports/resultados.md](reports/resultados.md).
+
+| Componente | Documentos | Resultado |
+|---|---:|---|
+| Router (texto vs. imagen) | 300 | 100.0% |
+| Clasificador de texto | 131 | 89.3% (CURP, CSF e INE: 100%; comprobante: 48.1%) |
+| Clasificador, diseño de comprobante no visto en train | 14 | 0.0% |
+| Parser de texto, CURP digital | 48 | 100% de documentos con todos los campos correctos; p50 155 ms |
+| Parser de texto, CSF digital | 53 | 100% de documentos con todos los campos correctos; p50 192 ms |
+
+Cómo leer estos números:
+
+- **El 100% de los parsers no dice nada de los documentos reales.** Leen la capa de texto que el mismo generador escribió. Lo que sí se mide así es que las reglas no se rompen con nombres compuestos, partículas, Ñ, sin segundo apellido ni números interiores. El dato que importa saldrá de `make eval-private` con documentos reales.
+- **El clasificador no generaliza al diseño de comprobante no visto.** No reconoce ninguno de los 14 recibos de teléfono, porque su vocabulario ("Resumen de cargos", "Fecha de expedición") no está en las palabras clave. No se ajustaron mirando test. En la FEA el tipo lo da el campo donde se sube el documento, así que el efecto es una advertencia `DOCUMENTO_NO_RECONOCIDO` que pide revisión, no un error de extracción.
 
 ## Cómo va a funcionar
 
