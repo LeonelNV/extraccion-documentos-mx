@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from docextract.evaluation import field_matches
-from docextract.normalize import parse_date
+from docextract.normalize import comparison_key, parse_date
 from docextract.parsers import PARSERS, extract_text_route
 from docextract.router import RouteKind
 from docextract.schemas import DocType, ExtractedField
@@ -181,6 +181,15 @@ def evaluar(directorio: Path, *, catalog: SepomexCatalog | None = None) -> Repor
             for x in (a, b)
         ]
         reporte.cruce.add("Mismo nombre en ambos documentos", not compare_names(*persona))
+        # Sin tolerancia: dos nombres pegados ("JUANCARLOS" contra "JUAN CARLOS") pasan la
+        # comparación difusa, pero no esta.
+        reporte.cruce.add(
+            "Mismo nombre, idéntico palabra por palabra",
+            all(
+                comparison_key(_valor(a, k) or "") == comparison_key(_valor(b, k) or "")
+                for k in ("nombre", "apellido_paterno", "apellido_materno")
+            ),
+        )
     return reporte
 
 

@@ -150,6 +150,7 @@ def test_eval_private_sin_etiquetas(
     assert "1/1    Nombre coherente con la CURP" in salida
     assert "1/1    RFC coherente con la CURP" in salida
     assert "1/1    Misma CURP en la constancia CURP y en la CSF" in salida
+    assert "1/1    Mismo nombre, idéntico palabra por palabra" in salida
     assert "Sin etiquetas.json" in salida
 
 

@@ -37,6 +37,7 @@ __all__ = [
     "draw_fitted",
     "draw_qr",
     "draw_silhouette",
+    "draw_watermark",
     "fea",
     "fecha_dmy",
     "fecha_larga",

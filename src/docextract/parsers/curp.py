@@ -6,8 +6,8 @@ Estrategia, de lo más confiable a lo menos:
 2. Nombre y apellidos por sus etiquetas. Si el documento trae el nombre completo en una
    sola línea, se divide con la CURP (``split_full_name``), así funciona aunque el
    formato real no tenga campos separados.
-3. Fecha, sexo y entidad por sus etiquetas; si no están impresos, se derivan de la CURP
-   con menor confianza.
+3. Fecha, sexo, entidad y nacionalidad por sus etiquetas; si no están impresos, se derivan
+   de la CURP con menor confianza (la nacionalidad, solo si nació en México).
 
 Cada valor se devuelve tal como está impreso. Si contradice a la CURP, baja su confianza y
 lleva la advertencia ``CURP_DATOS_NO_COINCIDEN``.
@@ -96,8 +96,7 @@ class CurpParser:
         out["fecha_nacimiento"] = self._fecha(get("fecha_nacimiento"), info)
         out["sexo"] = self._sexo(get("sexo"), info)
         out["entidad_nacimiento"] = self._entidad(get("entidad_nacimiento"), info)
-        nacionalidad = get("nacionalidad")
-        out["nacionalidad"] = field(nacionalidad or None, Confianza.ETIQUETADO)
+        out["nacionalidad"] = self._nacionalidad(get("nacionalidad"), info)
 
         return ExtractionResult(
             doc_type=DocType.CURP,
@@ -168,6 +167,16 @@ class CurpParser:
             return field(impreso, confidence)
         if info is not None:
             return field(info.sexo, Confianza.DERIVADO)
+        return field(None, 0.0)
+
+    def _nacionalidad(self, impresa: str | None, info: CurpInfo | None) -> ExtractedField:
+        """La constancia real no imprime la nacionalidad. Quien nace en territorio
+        mexicano es mexicano por nacimiento (art. 30 constitucional), así que se deduce de la
+        entidad de la CURP. Con ``NE`` (nacido en el extranjero) no se puede deducir."""
+        if impresa:
+            return field(impresa, Confianza.ETIQUETADO)
+        if info is not None and not info.nacido_en_extranjero:
+            return field("MEXICANA", Confianza.DERIVADO)
         return field(None, 0.0)
 
     def _entidad(self, impresa: str | None, info: CurpInfo | None) -> ExtractedField:

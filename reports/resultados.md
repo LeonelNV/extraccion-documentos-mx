@@ -16,7 +16,7 @@ Generado por `make eval`. No editar a mano.
 
 ## Parser de texto: curp
 
-48 documentos digitales · 100.0% con todos los campos correctos · latencia p50 155 ms, p95 181 ms · costo $0
+48 documentos digitales · 100.0% con todos los campos correctos · latencia p50 160 ms, p95 194 ms · costo $0
 
 | Campo | n | Exactitud | CER |
 |---|---:|---:|---:|
@@ -31,7 +31,7 @@ Generado por `make eval`. No editar a mano.
 
 ## Parser de texto: csf
 
-53 documentos digitales · 100.0% con todos los campos correctos · latencia p50 192 ms, p95 221 ms · costo $0
+53 documentos digitales · 100.0% con todos los campos correctos · latencia p50 287 ms, p95 321 ms · costo $0
 
 | Campo | n | Exactitud | CER |
 |---|---:|---:|---:|
