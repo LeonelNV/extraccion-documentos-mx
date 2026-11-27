@@ -30,7 +30,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from docextract.classify import classify_text
-from docextract.layout import GLUED_COLON, TextLayout, Word
+from docextract.layout import GLUED_COLON, WORD_OPTIONS, TextLayout, Word
 from docextract.parsers import csf as csf_parser
 from docextract.parsers import curp as curp_parser
 from docextract.schemas import DocType
@@ -94,11 +94,12 @@ def _fuente(nombre: str) -> str:
 
 
 def _marca_huecos(chars: list[dict]) -> str | None:
-    """Palabra enmascarada con ``·`` donde hay un hueco mayor a 0.15 del tamaño de letra
-    (un espacio mide ~0.28 em): dos palabras que pdfplumber juntó sin dos puntos."""
+    """Palabra enmascarada con ``·`` donde hay un hueco mayor a 0.1 del tamaño de letra:
+    posibles palabras que pdfplumber juntó. Con ``WORD_OPTIONS`` (umbral 0.15 em) esta lista
+    debería salir vacía; si no, el umbral no basta para ese documento."""
     piezas, actual = [], ""
     for i, ch in enumerate(chars):
-        if i and ch["x0"] - chars[i - 1]["x1"] > 0.15 * ch["size"]:
+        if i and ch["x0"] - chars[i - 1]["x1"] > 0.1 * ch["size"]:
             piezas.append(actual)
             actual = ""
         actual += ch["text"]
@@ -123,7 +124,7 @@ def esqueleto(pdf: bytes, doc_type: DocType | None, *, max_pages: int = 3) -> li
             offsets.append(offset)
             # Mismos parámetros que TextLayout.from_pdf: con extra_attrs, pdfplumber cortaría
             # las palabras donde cambia la fuente y ya no veríamos lo que ve el parser.
-            for w in page.extract_words(return_chars=True):
+            for w in page.extract_words(**WORD_OPTIONS, return_chars=True):
                 words.append(
                     Word(w["text"], w["x0"], w["x1"], w["top"] + offset, w["bottom"] + offset)
                 )

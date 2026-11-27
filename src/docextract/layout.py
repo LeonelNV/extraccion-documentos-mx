@@ -19,7 +19,7 @@ from functools import cached_property
 
 from docextract.normalize import comparison_key
 
-__all__ = ["Line", "Segment", "TextLayout", "Word", "split_glued"]
+__all__ = ["WORD_OPTIONS", "Line", "Segment", "TextLayout", "Word", "split_glued"]
 
 
 @dataclass(frozen=True)
@@ -68,6 +68,17 @@ class Segment:
     x0: float
 
 
+WORD_OPTIONS = {"x_tolerance_ratio": 0.15, "keep_blank_chars": False, "use_text_flow": False}
+"""Cómo pdfplumber arma palabras a partir de caracteres.
+
+Por omisión junta los caracteres a menos de 3 pt. La constancia del SAT no tiene caracteres
+de espacio: separa las palabras con huecos de menos de 3 pt (un espacio mide ~0.28 em, 2.2 pt
+a 8 pt), así que pdfplumber entregaba "PrimerApellido:" y ninguna etiqueta coincidía. Con
+``x_tolerance_ratio`` el umbral es proporcional al tamaño de letra: un hueco mayor a 0.15 em
+separa palabras; entre letras de una misma palabra el hueco es ~0. Medido con
+``make esqueleto`` sobre una constancia real.
+"""
+
 GLUED_COLON = re.compile(r"(?:(?<=[^\W\d_])|(?<=\))):(?=\w)")
 """Dos puntos entre una letra (o ")") y una letra o dígito: "Postal:63000"."""
 
@@ -76,10 +87,10 @@ def split_glued(word: Word) -> list[Word]:
     """Separa una etiqueta pegada a su valor: ``"Apellido:PEREZ"`` → ``"Apellido:"``,
     ``"PEREZ"``.
 
-    pdfplumber junta en una palabra los caracteres separados por menos de 3 pt, y la
-    constancia del SAT deja a veces la etiqueta a menos de eso de su valor (un visor de PDF
-    sí muestra el espacio). No separa horas (``14:31``) ni URLs (``http://``). Las cajas de
-    las piezas se reparten en proporción a sus caracteres.
+    En la constancia del SAT el código postal va pegado a su etiqueta ("Código Postal:85173"
+    aun en un visor de PDF), y el OCR también puede omitir el espacio. No separa horas
+    (``14:31``) ni URLs (``http://``). Las cajas de las piezas se reparten en proporción a
+    sus caracteres.
 
     >>> [w.text for w in split_glued(Word("Postal:63000", 0, 60, 0, 10))]
     ['Postal:', '63000']
@@ -117,7 +128,7 @@ class TextLayout:
         width = 0.0
         with pdfplumber.open(io.BytesIO(pdf)) as document:
             for page in document.pages[:max_pages]:
-                for w in page.extract_words(keep_blank_chars=False, use_text_flow=False):
+                for w in page.extract_words(**WORD_OPTIONS):
                     words.append(
                         Word(w["text"], w["x0"], w["x1"], w["top"] + offset, w["bottom"] + offset)
                     )

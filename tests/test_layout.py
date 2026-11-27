@@ -105,6 +105,25 @@ def test_etiqueta_pegada_a_su_valor(gap: float) -> None:
     assert lay.value(("Nombre (s)",), vocab) == "JUAN CARLOS"
 
 
+def test_palabras_sin_caracteres_de_espacio() -> None:
+    """Como la constancia del SAT: cada palabra se dibuja aparte, a 0.25 em de la anterior y
+    sin carácter de espacio. Con la tolerancia fija de 3 pt pdfplumber las juntaba todas."""
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+
+    buffer = io.BytesIO()
+    canvas = Canvas(buffer, invariant=1)
+    x = 50.0
+    for i, palabra in enumerate(["Primer", "Apellido:", "DE", "LA", "CRUZ"]):
+        font = "Helvetica-Bold" if i < 2 else "Helvetica"
+        canvas.setFont(font, 8)
+        canvas.drawString(x, 700, palabra)
+        x += stringWidth(palabra, font, 8) + 0.25 * 8
+    canvas.save()
+    lay = TextLayout.from_pdf(buffer.getvalue())
+    assert lay.lines[0].text == "Primer Apellido: DE LA CRUZ"
+    assert lay.value(("Primer apellido",), VOCAB) == "DE LA CRUZ"
+
+
 def test_no_separa_horas_ni_urls() -> None:
     lay = layout("Sello: 2026/08/12 14:31:01 http://sat.gob.mx")
     assert lay.lines[0].text == "Sello: 2026/08/12 14:31:01 http://sat.gob.mx"
