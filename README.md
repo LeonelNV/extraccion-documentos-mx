@@ -24,8 +24,8 @@ Generados por `make eval` sobre el split test del dataset sintético (75 persona
 | Router (texto vs. imagen) | 300 | 100.0% |
 | Clasificador de texto | 131 | 89.3% (CURP, CSF e INE: 100%; comprobante: 48.1%) |
 | Clasificador, diseño de comprobante no visto en train | 14 | 0.0% |
-| Parser de texto, CURP digital | 48 | 100% de documentos con todos los campos correctos; p50 161 ms |
-| Parser de texto, CSF digital | 53 | 100% de documentos con todos los campos correctos; p50 261 ms |
+| Parser de texto, CURP digital | 48 | 100% de documentos con todos los campos correctos; p50 160 ms |
+| Parser de texto, CSF digital | 53 | 100% de documentos con todos los campos correctos; p50 287 ms |
 
 Cómo leer estos números:
 
