@@ -1,16 +1,19 @@
 """Constancia de situación fiscal sintética.
 
-La estructura sigue a la constancia real (orden de secciones, texto de las etiquetas y forma
-de acomodar etiqueta y valor), descrita sin datos personales:
+Sigue la estructura de una constancia real, medida con ``make esqueleto`` sin ver sus datos
+(posición de cada línea, fuentes y etiquetas):
 
-* Página 1: cédula (RFC, nombre completo, idCIF y QR) a la izquierda; título, lugar y fecha
-  de emisión a la derecha; "Datos de Identificación del Contribuyente:" con un par
-  etiqueta-valor por renglón; "Datos del domicilio registrado" con dos pares por renglón.
+* Página 1: cédula de identificación fiscal (RFC, nombre completo, idCIF y QR) y, a la
+  derecha, título, lugar y fecha de emisión y el RFC bajo unas barras. "Datos de
+  Identificación del Contribuyente:" es una tabla: etiquetas a la izquierda y valores en una
+  columna. "Datos del domicilio registrado" lleva dos pares por renglón, cada valor justo
+  después de su etiqueta.
 * Página 2: actividades económicas, regímenes, avisos y sellos.
 
-Cada valor va justo después de su etiqueta en el mismo renglón. El código postal va pegado a
-su etiqueta, sin espacio, como en la real; en el resto la separación varía y a veces queda
-por debajo de los 3 pt con los que pdfplumber separa palabras.
+**Sin caracteres de espacio.** La constancia real dibuja cada palabra por separado, a menos
+de 3 pt de la anterior y sin carácter de espacio; aquí igual (``ESPACIO``). Con la tolerancia
+fija de pdfplumber eso juntaba "PrimerApellido:", que es lo que falló con la constancia
+real. El código postal va pegado a su etiqueta, como en la real.
 
 No lleva escudos, logotipos, el texto legal del SAT ni sellos reales: los avisos y sellos
 son texto de muestra y el QR trae datos sintéticos, no una URL de la autoridad fiscal.
@@ -19,8 +22,9 @@ son texto de muestra y el QR trae datos sintéticos, no una URL de la autoridad 
 import io
 from datetime import date
 
-from reportlab.lib.colors import HexColor, white
+from reportlab.lib.colors import Color, HexColor, white
 from reportlab.pdfbase.pdfmetrics import stringWidth
+from reportlab.pdfgen.canvas import Canvas
 
 from synth.render.common import (
     MESES,
@@ -28,7 +32,6 @@ from synth.render.common import (
     PAGE_W,
     DocContext,
     Rendered,
-    draw_fitted,
     draw_qr,
     draw_watermark,
     fea,
@@ -40,8 +43,10 @@ from synth.render.common import (
 TEMPLATE = "csf_constancia"
 
 BOLD, REGULAR = "Helvetica-Bold", "Helvetica"
-LEFT, RIGHT_COL = 42.0, PAGE_W / 2 + 6
+ESPACIO = 0.25
+"""Separación entre palabras, en em (un espacio de Helvetica mide 0.278 em)."""
 GRIS = HexColor("#555555")
+NEGRO = HexColor("#111111")
 
 ACTIVIDADES = (
     ("Asalariado", "Régimen de Sueldos y Salarios e Ingresos Asimilados a Salarios"),
@@ -58,14 +63,57 @@ def fecha_constancia(d: date) -> str:
     return f"{d.day:02d} DE {MESES[d.month - 1].upper()} DE {d.year}"
 
 
+def ancho(text: str, font: str, size: float) -> float:
+    words = text.split()
+    return sum(stringWidth(w, font, size) for w in words) + ESPACIO * size * (len(words) - 1)
+
+
+def texto(
+    c: Canvas,
+    x: float,
+    top: float,
+    text: str,
+    *,
+    font: str = REGULAR,
+    size: float = 8,
+    max_width: float | None = None,
+    color: Color | None = None,
+    centro: bool = False,
+) -> float:
+    """Dibuja ``text`` palabra por palabra, sin caracteres de espacio, con su parte de arriba
+    en ``top`` (medido desde el borde superior, como pdfplumber). Devuelve la x final."""
+    if max_width is not None:
+        while size > 5 and ancho(text, font, size) > max_width:
+            size -= 0.5
+    if centro:
+        x -= ancho(text, font, size) / 2
+    c.setFont(font, size)
+    c.setFillColor(color or NEGRO)
+    baseline = PAGE_H - top - 0.78 * size
+    for word in text.split():
+        c.drawString(x, baseline, word)
+        x += stringWidth(word, font, size) + ESPACIO * size
+    return x - ESPACIO * size
+
+
 def _wrap(text: str, font: str, size: float, max_width: float) -> list[str]:
     lines: list[str] = []
     for word in text.split():
-        if lines and stringWidth(f"{lines[-1]} {word}", font, size) <= max_width:
+        if lines and ancho(f"{lines[-1]} {word}", font, size) <= max_width:
             lines[-1] += f" {word}"
         else:
             lines.append(word)
     return lines or [""]
+
+
+def _wrap_chars(text: str, font: str, size: float, max_width: float) -> list[str]:
+    """Para cadenas sin espacios (sellos): corta por caracteres."""
+    lines = [""]
+    for ch in text:
+        if stringWidth(lines[-1] + ch, font, size) > max_width:
+            lines.append("")
+        lines[-1] += ch
+    return lines
 
 
 def render(ctx: DocContext) -> Rendered:
@@ -94,74 +142,60 @@ def render(ctx: DocContext) -> Rendered:
     inicio = min(inicio, ctx.reference_date)
     id_cif = "".join(rng.choice("0123456789") for _ in range(11))
     actividad, regimen = rng.choice(ACTIVIDADES)
-    # Separación entre etiqueta y valor: a veces menor que la tolerancia de pdfplumber.
-    gap = rng.choice((1.5, 4.0))
-    dy = rng.uniform(-6, 6)
+    dy = rng.uniform(-6, 6)  # desplazamiento vertical de toda la página 1
     barra = HexColor(rng.choice(("#5B6770", "#6D4C41", "#455A64")))
 
     buffer = io.BytesIO()
     c = new_canvas(buffer, title="Constancia de situación fiscal")
 
-    def pagina(numero: int) -> None:
-        draw_fitted(c, PAGE_W - 110, PAGE_H - 28, f"Página {numero} de 2", size=7, color=GRIS)
+    def pie(numero: int) -> None:
+        texto(c, 509, 776, f"Página {numero} de 2", size=8, color=GRIS)
 
-    def seccion(titulo: str, y: float) -> None:
+    def seccion(titulo: str, top: float) -> None:
         c.setFillColor(barra)
-        c.rect(36, y - 4, PAGE_W - 72, 15, stroke=0, fill=1)
-        draw_fitted(c, LEFT, y, titulo, font=BOLD, size=9, color=white)
-
-    def par(x: float, y: float, etiqueta: str, valor: str, ancho: float, sep: float) -> None:
-        """Etiqueta en negritas y el valor justo después, en el mismo renglón."""
-        draw_fitted(c, x, y, etiqueta, font=BOLD, size=8)
-        xv = x + stringWidth(etiqueta, BOLD, 8) + sep
-        if valor:
-            draw_fitted(c, xv, y, valor, size=8, max_width=max(ancho - (xv - x), 30))
+        c.rect(36, PAGE_H - top - 12, PAGE_W - 72, 15, stroke=0, fill=1)
+        texto(c, PAGE_W / 2, top, titulo, font=BOLD, size=10, color=white, centro=True)
 
     # ---------------------------------------------------------------- página 1
-    pagina(1)
-    top = PAGE_H - 48 + dy
-
-    # Cédula de identificación fiscal (izquierda)
+    # Cédula: recuadro con el QR a la izquierda y el texto centrado en x≈220.
     c.setStrokeColor(HexColor("#999999"))
-    c.rect(36, top - 196, 262, 206, stroke=1, fill=0)
-    draw_fitted(c, 46, top - 6, "CÉDULA DE IDENTIFICACIÓN FISCAL", font=BOLD, size=9)
-    draw_qr(c, f"MUESTRA|RFC={p.rfc}|idCIF={id_cif}", 46, top - 150, 100)
-    draw_fitted(c, 54, top - 166, "VALIDA TU INFORMACIÓN", font=BOLD, size=6.5)
-    draw_fitted(c, 80, top - 175, "FISCAL", font=BOLD, size=6.5)
-    x = 158
-    draw_fitted(c, x, top - 36, fields["rfc"], font=BOLD, size=10)
-    draw_fitted(c, x, top - 47, "Registro Federal de", size=6.5, color=GRIS)
-    draw_fitted(c, x, top - 55, "Contribuyentes", size=6.5, color=GRIS)
+    c.rect(40, PAGE_H - 314 - dy, 260, 201, stroke=1, fill=0)
+    texto(c, 69, 128 + dy, "CÉDULA DE IDENTIFICACIÓN FISCAL", font=BOLD, size=10)
+    draw_qr(c, f"MUESTRA|RFC={p.rfc}|idCIF={id_cif}", 48, PAGE_H - 262 - dy, 95)
+    centro = 222
+    texto(c, centro, 188 + dy, fields["rfc"], font=BOLD, size=8, centro=True)
+    texto(c, centro, 197 + dy, "Registro Federal de", centro=True)
+    texto(c, centro, 206 + dy, "Contribuyentes", centro=True)
     nombre_completo = " ".join(
         v for v in (fields["nombre"], fields["apellido_paterno"], fields["apellido_materno"]) if v
     )
-    y = top - 76
-    for renglon in _wrap(nombre_completo, BOLD, 8, 132)[:3]:
-        draw_fitted(c, x, y, renglon, font=BOLD, size=8, max_width=132)
-        y -= 10
-    draw_fitted(c, x, y - 1, "Nombre, denominación o razón", size=6.5, color=GRIS)
-    draw_fitted(c, x, y - 9, "social", size=6.5, color=GRIS)
-    draw_fitted(c, x, y - 28, f"idCIF: {id_cif}", font=BOLD, size=8)
-    draw_fitted(c, 46, top - 190, "MUESTRA - DOCUMENTO SINTÉTICO SIN VALIDEZ", size=6, color=GRIS)
+    top = 228 + dy
+    for renglon in _wrap(nombre_completo, BOLD, 8, 140)[:3]:
+        texto(c, centro, top, renglon, font=BOLD, size=8, max_width=140, centro=True)
+        top += 9.5
+    texto(c, centro, top + 1, "Nombre, denominación o razón", centro=True)
+    texto(c, centro, top + 10, "social", centro=True)
+    texto(c, centro, 277 + dy, f"idCIF: {id_cif}", font=BOLD, size=8, centro=True)
+    texto(c, centro, 287 + dy, "VALIDA TU INFORMACIÓN", font=BOLD, size=8, centro=True)
+    texto(c, centro, 296 + dy, "FISCAL", font=BOLD, size=8, centro=True)
+    texto(c, 46, 306 + dy, "MUESTRA - DOCUMENTO SINTÉTICO SIN VALIDEZ", size=6, color=GRIS)
 
-    # Título, lugar y fecha de emisión (derecha)
-    xr = 316
-    draw_fitted(c, xr, top - 18, "CONSTANCIA DE SITUACIÓN FISCAL", font=BOLD, size=12)
-    draw_fitted(c, xr, top - 52, "Lugar y Fecha de Emisión", size=7.5, color=GRIS)
+    # Título, lugar y fecha de emisión, RFC bajo unas barras decorativas (no es un código de
+    # barras legible).
+    texto(c, 334, 182 + dy, "CONSTANCIA DE SITUACIÓN FISCAL", font=BOLD, size=12)
+    texto(c, 382, 228 + dy, "Lugar y Fecha de Emisión", font=BOLD, size=8)
     lugar = f"{fields['municipio']} , {fields['estado']} A {fecha_constancia(ctx.fecha_emision)}"
-    draw_fitted(c, xr, top - 64, lugar, font=BOLD, size=8, max_width=PAGE_W - xr - 40)
-    # Barras decorativas con el RFC debajo (no es un código de barras legible).
+    texto(c, 445, 240 + dy, lugar, font=BOLD, size=8, max_width=PAGE_W - 345, centro=True)
     c.setFillColor(HexColor("#222222"))
-    bx = xr + 20
-    while bx < xr + 200:
+    bx = 360.0
+    while bx < 540:
         w = rng.choice((0.8, 1.2, 2.0))
-        c.rect(bx, top - 120, w, 34, stroke=0, fill=1)
+        c.rect(bx, PAGE_H - 292 - dy, w, 34, stroke=0, fill=1)
         bx += w + rng.choice((0.8, 1.4, 2.2))
-    draw_fitted(c, xr + 70, top - 132, fields["rfc"], size=8)
+    texto(c, 408, 296 + dy, fields["rfc"], size=8)
 
-    # Datos de identificación: un par por renglón
-    y = top - 228
-    seccion("Datos de Identificación del Contribuyente:", y)
+    # Datos de identificación: tabla con los valores en una columna.
+    seccion("Datos de Identificación del Contribuyente:", 323 + dy)
     identificacion = [
         ("RFC:", fields["rfc"]),
         ("CURP:", fields["curp"]),
@@ -173,14 +207,15 @@ def render(ctx: DocContext) -> Rendered:
         ("Fecha de último cambio de estado:", fecha_constancia(inicio)),
         ("Nombre Comercial:", ""),
     ]
-    y -= 20
+    top = 345 + dy
     for etiqueta, valor in identificacion:
-        par(LEFT, y, etiqueta, valor, PAGE_W - 2 * LEFT, gap)
-        y -= 14
+        texto(c, 43, top, etiqueta, font=BOLD, size=8)
+        if valor:
+            texto(c, 236, top, valor, size=8, max_width=PAGE_W - 236 - 40)
+        top += 21.9
 
-    # Domicilio: dos pares por renglón
-    y -= 8
-    seccion("Datos del domicilio registrado", y)
+    # Domicilio: dos pares por renglón, cada valor justo después de su etiqueta.
+    seccion("Datos del domicilio registrado", 552 + dy)
     domicilio = [
         ("Código Postal:", fields["codigo_postal"]),
         ("Tipo de Vialidad:", fields["tipo_vialidad"]),
@@ -194,63 +229,60 @@ def render(ctx: DocContext) -> Rendered:
         ("Entre Calle:", ""),
         ("Y Calle:", ""),
     ]
-    y -= 20
+    top = 575 + dy
     for i, (etiqueta, valor) in enumerate(domicilio):
-        x, ancho = (
-            (LEFT, RIGHT_COL - LEFT - 10) if i % 2 == 0 else (RIGHT_COL, PAGE_W - 24 - RIGHT_COL)
-        )
-        sep = 0.0 if etiqueta == "Código Postal:" else gap
-        par(x, y, etiqueta, valor, ancho, sep)
+        x, limite = (43, 300) if i % 2 == 0 else (311, PAGE_W - 24)
+        fin = texto(c, x, top, etiqueta, font=BOLD, size=8)
+        # El código postal va pegado a su etiqueta; los demás valores, a un espacio.
+        xv = fin if etiqueta == "Código Postal:" else fin + ESPACIO * 8
+        if valor:
+            texto(c, xv, top, valor, size=8, max_width=max(limite - xv, 30))
         if i % 2 == 1:
-            y -= 14
+            top += 21.9
 
+    pie(1)
     draw_watermark(c)
     c.showPage()
 
     # ---------------------------------------------------------------- página 2
-    pagina(2)
-    y = PAGE_H - 60
-    seccion("Actividades Económicas:", y)
-    y -= 20
-    columnas = ((LEFT, "Orden"), (80, "Actividad Económica"), (360, "Porcentaje"))
-    columnas += ((430, "Fecha Inicio"), (500, "Fecha Fin"))
-    for x, titulo in columnas:
-        draw_fitted(c, x, y, titulo, font=BOLD, size=8)
-    y -= 14
-    draw_fitted(c, LEFT + 8, y, "1", size=8)
-    draw_fitted(c, 80, y, actividad, size=8, max_width=270)
-    draw_fitted(c, 370, y, "100", size=8)
-    draw_fitted(c, 430, y, fecha_dmy(inicio), size=8)
+    seccion("Actividades Económicas:", 141)
+    encabezado = ((45, "Orden"), (176, "Actividad Económica"), (377, "Porcentaje"))
+    encabezado += ((440, "Fecha Inicio"), (516, "Fecha Fin"))
+    for x, titulo in encabezado:
+        texto(c, x, 160, titulo, font=BOLD, size=10)
+    texto(c, 38, 174, "1")
+    texto(c, 82, 174, actividad, max_width=280)
+    texto(c, 372, 174, "100")
+    texto(c, 449, 174, fecha_dmy(inicio))
 
-    y -= 30
-    seccion("Regímenes:", y)
-    y -= 20
-    for x, titulo in ((LEFT, "Régimen"), (430, "Fecha Inicio"), (500, "Fecha Fin")):
-        draw_fitted(c, x, y, titulo, font=BOLD, size=8)
-    y -= 14
-    draw_fitted(c, LEFT, y, regimen, size=8, max_width=380)
-    draw_fitted(c, 430, y, fecha_dmy(inicio), size=8)
+    seccion("Regímenes:", 212)
+    for x, titulo in ((214, "Régimen"), (440, "Fecha Inicio"), (516, "Fecha Fin")):
+        texto(c, x, 231, titulo, font=BOLD, size=10)
+    texto(c, 38, 245, regimen, max_width=400)
+    texto(c, 449, 245, fecha_dmy(inicio))
 
-    y -= 40
     aviso = (
         "Documento generado con datos ficticios para pruebas de software. No es una constancia "
         "oficial, no fue emitida por ninguna autoridad y no tiene validez legal ni fiscal. "
         "Cualquier parecido con una persona real es coincidencia."
     )
-    for renglon in _wrap(aviso, REGULAR, 7, PAGE_W - 2 * LEFT):
-        draw_fitted(c, LEFT, y, renglon, size=7, color=GRIS)
-        y -= 10
+    top = 279
+    for renglon in _wrap(aviso, REGULAR, 8, PAGE_W - 84):
+        texto(c, 42, top, renglon, color=GRIS)
+        top += 9.5
 
-    y -= 20
-    sello = "".join(rng.choice("0123456789abcdef") for _ in range(96))
+    sello = "".join(rng.choice("0123456789abcdef") for _ in range(160))
     cadena = (
         f"||{ctx.fecha_emision:%Y/%m/%d}|{p.rfc}|CONSTANCIA DE SITUACIÓN FISCAL|"
-        f"MUESTRA SIN VALIDEZ|{sello[:24]}||"
+        f"MUESTRA SIN VALIDEZ|{sello[:40]}||"
     )
-    for etiqueta, texto in (("Cadena Original Sello:", cadena), ("Sello Digital:", sello)):
-        draw_fitted(c, LEFT, y, etiqueta, font=BOLD, size=7)
-        xv = LEFT + stringWidth(etiqueta, BOLD, 7) + 4
-        draw_fitted(c, xv, y, texto, size=7, max_width=PAGE_W - LEFT - xv)
-        y -= 16
+    top = 391
+    for etiqueta, contenido in (("Cadena Original Sello:", cadena), ("Sello Digital:", sello)):
+        texto(c, 48, top, etiqueta, font=BOLD, size=8)
+        for renglon in _wrap_chars(contenido, REGULAR, 8, PAGE_W - 162 - 36):
+            texto(c, 162, top, renglon)
+            top += 9.3
+        top += 9
 
+    pie(2)
     return Rendered(pdf=finish(c, buffer), fields=fields)
