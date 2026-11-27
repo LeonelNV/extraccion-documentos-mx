@@ -1,0 +1,41 @@
+# Configuración del generador sintético (make synth).
+# Cualquier valor que se quite toma el valor por defecto de synth/config.py.
+
+seed = 20261126
+reference_date = 2026-11-01   # "hoy" para el generador: fechas de emisión de comprobantes
+dpi = 200                     # resolución al rasterizar (escaneo y foto)
+
+# Personas por split. Cada persona tiene 4 documentos: 500 personas ~ 2,000 documentos.
+[personas]
+train = 500
+val = 75
+test = 75
+
+# Probabilidad por persona de cada caso límite.
+[tasas]
+nombre_compuesto = 0.25
+jose_maria = 0.10        # el nombre compuesto empieza con JOSÉ o MARÍA (o MA. / J.)
+particula = 0.08         # apellido con partícula: DE LA CRUZ, DEL RÍO...
+sin_materno = 0.05
+enie = 0.08              # apellido con Ñ
+dieresis = 0.03          # apellido con Ü
+sexo_x = 0.02
+nacido_extranjero = 0.03 # CURP con entidad NE
+numero_interior = 0.25
+sin_numero = 0.04        # número exterior S/N
+inconsistencia = 0.10    # una inconsistencia etiquetada entre documentos
+domicilio_nayarit = 0.5
+nacido_nayarit = 0.4
+
+[comprobante]
+plantillas_train = ["luz", "agua", "banco"]
+plantilla_no_vista = "telefono"   # solo aparece en test
+fraccion_no_vista_test = 0.5
+dias_emision_max = 60
+
+# Probabilidades [digital, escaneo, foto] por tipo de documento.
+[modalidades]
+curp = [0.7, 0.2, 0.1]
+csf = [0.7, 0.2, 0.1]
+ine = [0.1, 0.4, 0.5]
+comprobante_domicilio = [0.3, 0.3, 0.4]
