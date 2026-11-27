@@ -31,10 +31,7 @@
         "nombre": "GERARDO CARLOS",
         "apellido_paterno": "DEL RIO",
         "apellido_materno": "MAGAÑA",
-        "sexo": "HOMBRE",
-        "fecha_nacimiento": "11/06/1966",
-        "entidad_nacimiento": "CHIAPAS",
-        "nacionalidad": "MEXICANA"
+        "entidad_registro": "CHIAPAS"
       },
       "augmentation": {}
     },

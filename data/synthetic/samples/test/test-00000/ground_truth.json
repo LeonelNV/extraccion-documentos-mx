@@ -31,10 +31,7 @@
         "nombre": "ARACELI",
         "apellido_paterno": "VALENTIN",
         "apellido_materno": "PUENTE",
-        "sexo": "MUJER",
-        "fecha_nacimiento": "13/12/1957",
-        "entidad_nacimiento": "TABASCO",
-        "nacionalidad": "MEXICANA"
+        "entidad_registro": "TABASCO"
       },
       "augmentation": {}
     },

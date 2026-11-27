@@ -31,10 +31,7 @@
         "nombre": "CLAUDIA",
         "apellido_paterno": "LIMON",
         "apellido_materno": "ROJAS",
-        "sexo": "MUJER",
-        "fecha_nacimiento": "01/01/2003",
-        "entidad_nacimiento": "NAYARIT",
-        "nacionalidad": "MEXICANA"
+        "entidad_registro": "NAYARIT"
       },
       "augmentation": {
         "rotation": 0.4936285061821004,

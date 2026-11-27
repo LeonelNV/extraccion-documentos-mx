@@ -24,12 +24,13 @@ Generados por `make eval` sobre el split test del dataset sintético (75 persona
 | Router (texto vs. imagen) | 300 | 100.0% |
 | Clasificador de texto | 131 | 89.3% (CURP, CSF e INE: 100%; comprobante: 48.1%) |
 | Clasificador, diseño de comprobante no visto en train | 14 | 0.0% |
-| Parser de texto, CURP digital | 48 | 100% de documentos con todos los campos correctos; p50 160 ms |
-| Parser de texto, CSF digital | 53 | 100% de documentos con todos los campos correctos; p50 287 ms |
+| Parser de texto, CURP digital | 48 | 100% de documentos con todos los campos correctos; p50 253 ms |
+| Parser de texto, CSF digital | 53 | 100% de documentos con todos los campos correctos; p50 284 ms |
 
 Cómo leer estos números:
 
 - **El 100% de los parsers no dice nada de los documentos reales.** Leen la capa de texto que el mismo generador escribió. Lo que sí se mide así es que las reglas no se rompen con nombres compuestos, partículas, Ñ, sin segundo apellido ni números interiores. El dato que importa saldrá de `make eval-private` con documentos reales.
+- **En la CURP solo se miden curp, nombre y apellidos**, porque son los únicos campos que la constancia imprime. Como en la real, el nombre va completo en un renglón y el parser lo divide con las letras de la CURP: en los 432 CURP digitales de los tres splits la división fue correcta, y en 35 (8%) quedó marcada como ambigua (confianza 0.70) para revisión. Sexo, fecha y entidad de nacimiento y nacionalidad se deducen de la CURP.
 - **El clasificador no generaliza al diseño de comprobante no visto.** No reconoce ninguno de los 14 recibos de teléfono, porque su vocabulario ("Resumen de cargos", "Fecha de expedición") no está en las palabras clave. No se ajustaron mirando test. En la FEA el tipo lo da el campo donde se sube el documento, así que el efecto es una advertencia `DOCUMENTO_NO_RECONOCIDO` que pide revisión, no un error de extracción.
 
 ## Cómo va a funcionar

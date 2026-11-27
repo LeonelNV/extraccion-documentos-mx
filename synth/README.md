@@ -34,9 +34,9 @@ La configuración está en [`config.toml`](config.toml): semilla, personas por s
 
 | Documento | Plantilla | Rasgos |
 |---|---|---|
-| CURP | `curp_constancia` | Campos etiquetados, nombre sin acentos, QR |
+| CURP | `curp_constancia` | Estructura de la constancia real: título como imagen, nombre completo en un renglón, entidad de registro; no imprime sexo, fecha ni entidad de nacimiento ni nacionalidad. Firmante ficticio y QR con datos sintéticos |
 | INE | `ine_credencial` | Frente y reverso en una página; domicilio abreviado ("C", "COL", "NAY.") |
-| CSF | `csf_constancia` | Domicilio por campos (tipo y nombre de vialidad, localidad, municipio); acentos en la mitad |
+| CSF | `csf_constancia` | Estructura de la constancia real, palabras sin caracteres de espacio; domicilio por campos (tipo y nombre de vialidad, localidad, municipio); acentos en la mitad |
 | Comprobante | `comprobante_luz`, `_agua`, `_banco` | Tres diseños con estilos de texto, domicilio y fecha distintos |
 | Comprobante | `comprobante_telefono` | **Solo en test**, para medir la generalización a un diseño no visto |
 
