@@ -209,6 +209,17 @@ class SepomexCatalog:
     def lookup(self, codigo_postal: str) -> tuple[Asentamiento, ...]:
         return self._by_cp.get(codigo_postal, ())
 
+    def codigos_postales(self, *, clave_estado: str | None = None) -> list[str]:
+        """CPs en orden, opcionalmente solo los de un estado (clave de 2 dígitos de SEPOMEX).
+
+        El orden es estable para que un muestreo con semilla sea reproducible.
+        """
+        return sorted(
+            cp
+            for cp, rows in self._by_cp.items()
+            if clave_estado is None or rows[0].clave_estado == clave_estado
+        )
+
     def suggest_colonias(
         self, codigo_postal: str, colonia: str, *, limit: int = 3
     ) -> list[tuple[Asentamiento, float]]:

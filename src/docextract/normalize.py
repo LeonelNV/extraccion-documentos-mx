@@ -1,12 +1,16 @@
 """Normalización de texto, fechas y datos de domicilio.
 
-Regla general: el ``value`` que llega al formulario conserva el texto **tal como viene en el
-documento** (solo se limpian espacios). Las funciones ``*_key`` producen una **clave de
-comparación** (mayúsculas, sin acentos, con Ñ) que se usa únicamente para comparar valores
-entre documentos o contra catálogos; nunca se muestra ni se guarda como valor.
+Hay tres formas de un mismo texto:
 
-Las excepciones son los datos con un formato canónico propio: identificadores (CURP, RFC),
-código postal y fechas, que se convierten a su forma estándar.
+- **Tal como viene en el documento** (``clean_text``: solo se limpian espacios). Es lo que
+  produce un extractor y lo que se guarda como texto impreso en el ground truth.
+- **Formato de la FEA** (``to_form_format``): mayúsculas, sin acentos, con Ñ. Así guarda la
+  FEA nombres y domicilio, y es el ``value`` final del formulario prellenado.
+- **Clave de comparación** (``comparison_key`` y ``*_key``): además quita la puntuación y
+  expande abreviaturas. Solo se usa para comparar; nunca se muestra ni se guarda.
+
+Los datos con formato canónico propio se convierten a él: identificadores (CURP, RFC),
+código postal y fechas.
 """
 
 import re
@@ -22,6 +26,7 @@ __all__ = [
     "normalize_codigo_postal",
     "parse_date",
     "strip_accents",
+    "to_form_format",
 ]
 
 _WHITESPACE = re.compile(r"\s+")
@@ -57,6 +62,23 @@ def strip_accents(text: str, *, keep_enie: bool = True) -> str:
         decomposed = unicodedata.normalize("NFD", char)
         out.append("".join(c for c in decomposed if not unicodedata.combining(c)))
     return "".join(out)
+
+
+def to_form_format(text: str | None) -> str | None:
+    """Formato en que la FEA guarda nombres y domicilio: mayúsculas, sin acentos, con Ñ.
+
+    A diferencia de la clave de comparación, conserva la puntuación ("O'BRIAN", "S/N").
+    ``None`` se conserva; ``""`` sigue siendo ``""`` (el documento indica que no existe).
+
+    >>> to_form_format("  María José  Peña ")
+    'MARIA JOSE PEÑA'
+    >>> to_form_format("Argüello-O'Brian")
+    "ARGUELLO-O'BRIAN"
+    """
+    cleaned = clean_text(text)
+    if cleaned is None:
+        return None
+    return strip_accents(unicodedata.normalize("NFC", cleaned)).upper()
 
 
 def comparison_key(text: str | None) -> str:
