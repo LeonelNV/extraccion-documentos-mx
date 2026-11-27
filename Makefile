@@ -3,7 +3,7 @@
 # las muestra `make help`.
 
 .DEFAULT_GOAL := help
-.PHONY: help install lint format test check-data ci sepomex verificar-claves synth synth-samples eval eval-private esqueleto api
+.PHONY: help install lint format test check-data ci sepomex verificar-claves tessdata synth synth-samples eval eval-private esqueleto api
 
 help: ## Muestra esta ayuda
 	@uv run --no-project python scripts/make_help.py Makefile
@@ -33,6 +33,9 @@ sepomex: ## Descarga el catálogo de códigos postales de SEPOMEX a data/sepomex
 
 verificar-claves: ## Comprueba los dígitos verificadores con CURPs/RFCs reales (solo imprime conteos)
 	uv run python scripts/verificar_claves.py
+
+tessdata: ## Descarga los modelos de Tesseract (español) a models/tessdata/ y los verifica
+	uv run python scripts/download_tessdata.py
 
 synth: ## Genera el dataset sintético en data/synthetic/ (requiere make sepomex; usa --force)
 	uv run python -m synth --force

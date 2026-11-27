@@ -67,11 +67,12 @@ Cada campo del formulario (`curp`, `rfc`, `nombre`, `apellido_paterno`, `apellid
 
 ## Desarrollo
 
-Requisitos: [uv](https://docs.astral.sh/uv/), git y make (en Windows: `winget install ezwinports.make`).
+Requisitos: [uv](https://docs.astral.sh/uv/), git, make y Tesseract 5 para el OCR (en Windows: `winget install ezwinports.make UB-Mannheim.TesseractOCR`; en Ubuntu: `apt install tesseract-ocr`).
 
 ```bash
 make install   # dependencias fijadas en uv.lock y hooks de pre-commit
 make sepomex   # catálogo de códigos postales (no se versiona; ver docs/validaciones.md)
+make tessdata  # modelos de Tesseract en español, fijados por SHA-256, en models/tessdata/
 make synth     # dataset sintético en data/synthetic/ (no se versiona)
 make test      # pruebas
 make lint      # ruff

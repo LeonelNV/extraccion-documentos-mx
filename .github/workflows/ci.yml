@@ -59,4 +59,12 @@ jobs:
           enable-cache: true
       - run: uv sync --locked
       - run: uv run python --version
+      # OCR: el binario del sistema y los mismos modelos fijados (SHA-256) que en la PC.
+      - name: Instala Tesseract
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends tesseract-ocr
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: models/tessdata
+          key: tessdata-${{ hashFiles('scripts/download_tessdata.py') }}
+      - run: uv run python scripts/download_tessdata.py
       - run: uv run pytest
