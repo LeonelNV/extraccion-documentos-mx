@@ -19,10 +19,21 @@ dev = [
     "pytest>=8",
     "ruff>=0.8",
 ]
+synth = [
+    "faker>=30,<40",
+    "numpy>=2.0,<3",
+    "pillow>=10.4,<12",
+    "pypdfium2>=4.30,<6",
+    "reportlab>=4.2,<5",
+]
 
 [build-system]
 requires = ["uv_build>=0.13.10,<0.14.0"]
 build-backend = "uv_build"
+
+# `uv sync` instala también el generador sintético: sus pruebas corren en CI.
+[tool.uv]
+default-groups = ["dev", "synth"]
 
 # ---------------------------------------------------------------------------
 # Ruff
@@ -30,7 +41,7 @@ build-backend = "uv_build"
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-src = ["src", "tests", "scripts"]
+src = ["src", "tests", "scripts", "."]
 
 [tool.ruff.lint]
 select = [
@@ -49,5 +60,5 @@ select = [
 # ---------------------------------------------------------------------------
 [tool.pytest.ini_options]
 testpaths = ["tests", "src"]
-pythonpath = ["scripts"]
+pythonpath = ["scripts", "."]  # "." para importar el paquete synth/
 addopts = ["-ra", "--strict-markers", "--doctest-modules"]

@@ -15,6 +15,7 @@ from docextract.normalize import (
     normalize_codigo_postal,
     parse_date,
     strip_accents,
+    to_form_format,
 )
 
 
@@ -187,3 +188,23 @@ def test_address_key(texto: str, esperado: str) -> None:
 )
 def test_is_sin_numero(texto: str | None, esperado: bool) -> None:
     assert is_sin_numero(texto) is esperado
+
+
+# ---------------------------------------------------------------------------
+# Formato de la FEA
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize(
+    ("texto", "esperado"),
+    [
+        ("María José", "MARIA JOSE"),
+        ("Núñez", "NUÑEZ"),  # la Ñ se conserva
+        ("Argüello", "ARGUELLO"),
+        ("O'Brian", "O'BRIAN"),  # la puntuación se conserva
+        ("  Calle  Juárez ", "CALLE JUAREZ"),
+        ("S/N", "S/N"),
+        ("", ""),  # "no existe" sigue siendo cadena vacía
+        (None, None),
+    ],
+)
+def test_to_form_format(texto: str | None, esperado: str | None) -> None:
+    assert to_form_format(texto) == esperado

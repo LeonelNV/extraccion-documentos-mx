@@ -1,0 +1,122 @@
+{
+  "persona_id": "train-00000",
+  "split": "train",
+  "form": {
+    "curp": "RIMG660611HCSXGR09",
+    "rfc": "RIMG660611586",
+    "nombre": "GERARDO CARLOS",
+    "apellido_paterno": "DEL RIO",
+    "apellido_materno": "MAGAÑA",
+    "fecha_nacimiento": "1966-06-11",
+    "nacionalidad": "MX",
+    "calle": "AVENIDA NORTE ARREDONDO",
+    "numero_exterior": "1780 BIS",
+    "numero_interior": "",
+    "colonia": "SAN NICOLAS ACAMBAY",
+    "ciudad": "ACAMBAY DE RUIZ CASTAÑEDA",
+    "estado": "MEXICO",
+    "codigo_postal": "50325"
+  },
+  "documents": [
+    {
+      "persona_id": "train-00000",
+      "doc_type": "curp",
+      "template": "curp_constancia",
+      "template_seen_in_train": true,
+      "modality": "digital",
+      "pdf": "train/train-00000/curp.pdf",
+      "image": null,
+      "fields": {
+        "curp": "RIMG660611HCSXGR09",
+        "nombre": "GERARDO CARLOS",
+        "apellido_paterno": "DEL RIO",
+        "apellido_materno": "MAGAÑA",
+        "sexo": "HOMBRE",
+        "fecha_nacimiento": "11/06/1966",
+        "entidad_nacimiento": "CHIAPAS",
+        "nacionalidad": "MEXICANA"
+      },
+      "augmentation": {}
+    },
+    {
+      "persona_id": "train-00000",
+      "doc_type": "ine",
+      "template": "ine_credencial",
+      "template_seen_in_train": true,
+      "modality": "digital",
+      "pdf": "train/train-00000/ine.pdf",
+      "image": null,
+      "fields": {
+        "nombre": "GERARDO CARLOS",
+        "apellido_paterno": "DEL RIO",
+        "apellido_materno": "MAGAÑA",
+        "fecha_nacimiento": "11/06/1966",
+        "sexo": "H",
+        "curp": "RIMG660611HCSXGR09",
+        "calle": "AV NORTE ARREDONDO",
+        "numero_exterior": "1780 BIS",
+        "numero_interior": "",
+        "colonia": "SAN NICOLAS ACAMBAY",
+        "codigo_postal": "50325",
+        "ciudad": "ACAMBAY DE RUIZ CASTAÑEDA",
+        "estado": "ESTADO DE MEXICO.",
+        "clave_elector": "DEMAGE66061107H433"
+      },
+      "augmentation": {}
+    },
+    {
+      "persona_id": "train-00000",
+      "doc_type": "csf",
+      "template": "csf_constancia",
+      "template_seen_in_train": true,
+      "modality": "digital",
+      "pdf": "train/train-00000/csf.pdf",
+      "image": null,
+      "fields": {
+        "rfc": "RIMG660611586",
+        "curp": "RIMG660611HCSXGR09",
+        "nombre": "GERARDO CARLOS",
+        "apellido_paterno": "DEL RIO",
+        "apellido_materno": "MAGAÑA",
+        "codigo_postal": "50325",
+        "tipo_vialidad": "AVENIDA",
+        "nombre_vialidad": "NORTE ARREDONDO",
+        "numero_exterior": "1780 BIS",
+        "numero_interior": "",
+        "colonia": "SAN NICOLAS ACAMBAY",
+        "ciudad": "ACAMBAY DE RUIZ CASTAÑEDA",
+        "municipio": "ACAMBAY DE RUIZ CASTAÑEDA",
+        "estado": "MEXICO",
+        "calle": "AVENIDA NORTE ARREDONDO"
+      },
+      "augmentation": {}
+    },
+    {
+      "persona_id": "train-00000",
+      "doc_type": "comprobante_domicilio",
+      "template": "comprobante_luz",
+      "template_seen_in_train": true,
+      "modality": "digital",
+      "pdf": "train/train-00000/comprobante.pdf",
+      "image": null,
+      "fields": {
+        "titular": "GERARDO CARLOS DEL RIO MAGAÑA",
+        "calle": "AVENIDA NORTE ARREDONDO",
+        "numero_exterior": "1780 BIS",
+        "numero_interior": "",
+        "colonia": "SAN NICOLAS ACAMBAY",
+        "codigo_postal": "50325",
+        "ciudad": "ACAMBAY DE RUIZ CASTAÑEDA",
+        "estado": "MEXICO",
+        "fecha_emision": "01 OCT 2026"
+      },
+      "augmentation": {}
+    }
+  ],
+  "expected_warnings": [],
+  "tags": [
+    "enie",
+    "nombre_compuesto",
+    "particula"
+  ]
+}

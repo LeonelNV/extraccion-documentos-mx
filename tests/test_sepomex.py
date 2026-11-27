@@ -234,3 +234,9 @@ def test_catalogo_de_entidades_coincide_con_sepomex(
     en_sepomex = {(a.clave_estado, a.estado) for a in asentamientos_reales}
     nuestro = {(e.clave_inegi, e.nombre) for e in ENTIDADES}
     assert en_sepomex == nuestro
+
+
+def test_codigos_postales_por_estado(catalogo: SepomexCatalog) -> None:
+    assert catalogo.codigos_postales() == ["01901", "63901", "63902"]
+    assert catalogo.codigos_postales(clave_estado="18") == ["63901", "63902"]
+    assert catalogo.codigos_postales(clave_estado="32") == []

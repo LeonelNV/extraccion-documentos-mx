@@ -4,7 +4,12 @@ Qué se valida, de dónde salen las reglas y qué partes **no** se pudieron veri
 
 ## Principios
 
-- **El valor no se toca.** El `value` que llega al formulario conserva el texto como viene en el documento (solo se limpian espacios y caracteres invisibles). Para comparar se usa una *clave normalizada*: mayúsculas, sin acentos, con Ñ, sin puntuación. Las excepciones son los datos con formato canónico: CURP y RFC (mayúsculas, sin espacios), código postal (5 dígitos) y fechas (`date`).
+- **Tres formas de un mismo texto** (`normalize.py`):
+  - **Tal como viene en el documento.** Solo se limpian espacios y caracteres invisibles. Es lo que produce un extractor.
+  - **Formato de la FEA** (`to_form_format`): mayúsculas, sin acentos, con Ñ. Así guarda la FEA nombres y domicilio, y es el `value` final del formulario.
+  - **Clave de comparación:** además quita la puntuación y expande abreviaturas. Solo se usa para comparar.
+
+  Los datos con formato canónico se convierten a él: CURP y RFC (mayúsculas, sin espacios), código postal (5 dígitos) y fechas (`date`).
 - **Validadores puros.** Reciben valores y devuelven datos derivados y advertencias (`ExtractionWarning`). No leen archivos (salvo el catálogo de SEPOMEX, que se carga una vez) ni dependen del reloj: la fecha de hoy se pasa como argumento.
 - **Los mensajes no llevan datos personales.** Ninguna advertencia incluye la CURP, el RFC, nombres ni domicilios; las pruebas lo comprueban.
 - **Ante la duda, advertir y no rechazar.** Cuando una regla no está confirmada, la comparación es tolerante para no marcar como sospechoso un documento correcto.

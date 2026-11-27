@@ -6,10 +6,13 @@ Extracción automática de datos de documentos oficiales mexicanos (CURP, INE, C
 
 ## Estado
 
-En desarrollo, en la **fase 2 de 9**. Ya están:
+En desarrollo, en la **fase 3 de 9**. Ya están:
 
 - el esqueleto del repo, las herramientas, la CI y los esquemas de salida (fase 1);
-- los validadores y la normalización (fase 2): CURP y RFC con dígito verificador, nombres entre documentos, domicilio contra el catálogo de SEPOMEX y antigüedad del comprobante. Las reglas, sus fuentes y lo que no se pudo verificar están en [docs/validaciones.md](docs/validaciones.md).
+- los validadores y la normalización (fase 2): CURP y RFC con dígito verificador, nombres entre documentos, domicilio contra el catálogo de SEPOMEX y antigüedad del comprobante. Las reglas, sus fuentes y lo que no se pudo verificar están en [docs/validaciones.md](docs/validaciones.md);
+- el generador de datos sintéticos (fase 3): personas ficticias con sus 4 documentos, en PDF digital, escaneo y foto de celular, con su ground truth. Hay un diseño de comprobante reservado para test. Detalles en [synth/README.md](synth/README.md).
+
+![Documentos sintéticos de muestra](docs/img/muestras-sinteticas.jpg)
 
 Todavía no hay extractores ni resultados; las métricas se publicarán aquí cuando las genere `make eval`.
 
@@ -52,12 +55,13 @@ Requisitos: [uv](https://docs.astral.sh/uv/), git y make (en Windows: `winget in
 ```bash
 make install   # dependencias fijadas en uv.lock y hooks de pre-commit
 make sepomex   # catálogo de códigos postales (no se versiona; ver docs/validaciones.md)
+make synth     # dataset sintético en data/synthetic/ (no se versiona)
 make test      # pruebas
 make lint      # ruff
 make help      # todos los objetivos
 ```
 
-Sin el catálogo de SEPOMEX las pruebas pasan igual: usan un catálogo ficticio, y las dos pruebas contra el catálogo real se omiten.
+Sin el catálogo de SEPOMEX las pruebas pasan igual: usan un catálogo ficticio, y las dos pruebas contra el catálogo real se omiten. `make synth` sí necesita el catálogo.
 
 ## Estructura
 

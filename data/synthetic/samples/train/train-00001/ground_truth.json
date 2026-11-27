@@ -1,0 +1,162 @@
+{
+  "persona_id": "train-00001",
+  "split": "train",
+  "form": {
+    "curp": "RIJT971119MNTVSR08",
+    "rfc": "RIJT9711192P4",
+    "nombre": "TERESA",
+    "apellido_paterno": "RIVERA",
+    "apellido_materno": "JASSO",
+    "fecha_nacimiento": "1997-11-19",
+    "nacionalidad": "MX",
+    "calle": "RETORNO SUR VARELA",
+    "numero_exterior": "2853",
+    "numero_interior": "",
+    "colonia": "EDUARDO ZAMUDIO",
+    "ciudad": "MOROLEON",
+    "estado": "GUANAJUATO",
+    "codigo_postal": "38845"
+  },
+  "documents": [
+    {
+      "persona_id": "train-00001",
+      "doc_type": "curp",
+      "template": "curp_constancia",
+      "template_seen_in_train": true,
+      "modality": "foto",
+      "pdf": "train/train-00001/curp.pdf",
+      "image": "train/train-00001/curp.jpg",
+      "fields": {
+        "curp": "RIJT971119MNTVSR08",
+        "nombre": "TERESA",
+        "apellido_paterno": "RIVERA",
+        "apellido_materno": "JASSO",
+        "sexo": "MUJER",
+        "fecha_nacimiento": "19/11/1997",
+        "entidad_nacimiento": "NAYARIT",
+        "nacionalidad": "MEXICANA"
+      },
+      "augmentation": {
+        "rotation": -8.304422084071621,
+        "perspective": 0.05340982206862152,
+        "fill": 0.8447701482732051,
+        "light_min": 0.6483624864761359,
+        "shadow": 0.0,
+        "shadow_strength": 0.0,
+        "blur": 0.8971079406825351,
+        "motion_blur": 0.0,
+        "noise": 3.7429984613808474,
+        "jpeg_quality": 73.0
+      }
+    },
+    {
+      "persona_id": "train-00001",
+      "doc_type": "ine",
+      "template": "ine_credencial",
+      "template_seen_in_train": true,
+      "modality": "foto",
+      "pdf": "train/train-00001/ine.pdf",
+      "image": "train/train-00001/ine.jpg",
+      "fields": {
+        "nombre": "TERESA",
+        "apellido_paterno": "RIVERA",
+        "apellido_materno": "JASSO",
+        "fecha_nacimiento": "19/11/1997",
+        "sexo": "M",
+        "curp": "RIJT971119MNTVSR08",
+        "calle": "RETORNO SUR VARELA",
+        "numero_exterior": "2853",
+        "numero_interior": "",
+        "colonia": "EDUARDO ZAMUDIO",
+        "codigo_postal": "38845",
+        "ciudad": "MOROLEON",
+        "estado": "GTO.",
+        "clave_elector": "RIJATE97111918M794"
+      },
+      "augmentation": {
+        "rotation": 0.7040627807904105,
+        "perspective": 0.03354676278617833,
+        "fill": 0.7324539400292609,
+        "light_min": 0.8527116013892377,
+        "shadow": 1.0,
+        "shadow_strength": 0.27212918579754136,
+        "blur": 0.8159496466264751,
+        "motion_blur": 0.0,
+        "noise": 5.301468030166848,
+        "jpeg_quality": 63.0
+      }
+    },
+    {
+      "persona_id": "train-00001",
+      "doc_type": "csf",
+      "template": "csf_constancia",
+      "template_seen_in_train": true,
+      "modality": "foto",
+      "pdf": "train/train-00001/csf.pdf",
+      "image": "train/train-00001/csf.jpg",
+      "fields": {
+        "rfc": "RIJT9711192P4",
+        "curp": "RIJT971119MNTVSR08",
+        "nombre": "TERESA",
+        "apellido_paterno": "RIVERA",
+        "apellido_materno": "JASSO",
+        "codigo_postal": "38845",
+        "tipo_vialidad": "RETORNO",
+        "nombre_vialidad": "SUR VARELA",
+        "numero_exterior": "2853",
+        "numero_interior": "",
+        "colonia": "EDUARDO ZAMUDIO",
+        "ciudad": "MOROLEON",
+        "municipio": "MOROLEON",
+        "estado": "GUANAJUATO",
+        "calle": "RETORNO SUR VARELA"
+      },
+      "augmentation": {
+        "rotation": 7.671954056131337,
+        "perspective": 0.026459500093081505,
+        "fill": 0.7850879432775875,
+        "light_min": 0.7958070706246463,
+        "shadow": 0.0,
+        "shadow_strength": 0.0,
+        "blur": 1.319206106363698,
+        "motion_blur": 0.0,
+        "noise": 4.154513226599726,
+        "jpeg_quality": 84.0
+      }
+    },
+    {
+      "persona_id": "train-00001",
+      "doc_type": "comprobante_domicilio",
+      "template": "comprobante_agua",
+      "template_seen_in_train": true,
+      "modality": "foto",
+      "pdf": "train/train-00001/comprobante.pdf",
+      "image": "train/train-00001/comprobante.jpg",
+      "fields": {
+        "titular": "Teresa Rivera Jasso",
+        "calle": "Retorno Sur Varela",
+        "numero_exterior": "2853",
+        "numero_interior": "",
+        "colonia": "Eduardo Zamudio",
+        "codigo_postal": "38845",
+        "ciudad": "Moroleón",
+        "estado": "Guanajuato",
+        "fecha_emision": "6 de septiembre de 2026"
+      },
+      "augmentation": {
+        "rotation": -9.741044697112692,
+        "perspective": 0.04487873985260206,
+        "fill": 0.8961453273729987,
+        "light_min": 0.6316691668411364,
+        "shadow": 1.0,
+        "shadow_strength": 0.3572119481074514,
+        "blur": 1.4663815101932496,
+        "motion_blur": 0.0,
+        "noise": 2.8435342749332175,
+        "jpeg_quality": 48.0
+      }
+    }
+  ],
+  "expected_warnings": [],
+  "tags": []
+}
