@@ -1,0 +1,105 @@
+{
+  "generator_version": "1.0.0",
+  "seed": 20261126,
+  "reference_date": "2026-11-01",
+  "config": {
+    "seed": 20261126,
+    "reference_date": "2026-11-01",
+    "dpi": 200,
+    "personas": {
+      "train": 500,
+      "val": 75,
+      "test": 75
+    },
+    "tasas": {
+      "nombre_compuesto": 0.25,
+      "jose_maria": 0.1,
+      "particula": 0.08,
+      "sin_materno": 0.05,
+      "enie": 0.08,
+      "dieresis": 0.03,
+      "sexo_x": 0.02,
+      "nacido_extranjero": 0.03,
+      "numero_interior": 0.25,
+      "sin_numero": 0.04,
+      "inconsistencia": 0.1,
+      "domicilio_nayarit": 0.5,
+      "nacido_nayarit": 0.4
+    },
+    "comprobante": {
+      "plantillas_train": [
+        "luz",
+        "agua",
+        "banco"
+      ],
+      "plantilla_no_vista": "telefono",
+      "fraccion_no_vista_test": 0.5,
+      "dias_emision_max": 60
+    },
+    "modalidades": {
+      "curp": [
+        0.7,
+        0.2,
+        0.1
+      ],
+      "csf": [
+        0.7,
+        0.2,
+        0.1
+      ],
+      "ine": [
+        0.1,
+        0.4,
+        0.5
+      ],
+      "comprobante_domicilio": [
+        0.3,
+        0.3,
+        0.4
+      ]
+    }
+  },
+  "counts": {
+    "train": {
+      "documentos": 12,
+      "modalidad:digital": 4,
+      "modalidad:escaneo": 4,
+      "modalidad:foto": 4,
+      "personas": 3,
+      "plantilla:comprobante_agua": 1,
+      "plantilla:comprobante_banco": 1,
+      "plantilla:comprobante_luz": 1,
+      "plantilla:csf_constancia": 3,
+      "plantilla:curp_constancia": 3,
+      "plantilla:ine_credencial": 3,
+      "tipo:comprobante_domicilio": 3,
+      "tipo:csf": 3,
+      "tipo:curp": 3,
+      "tipo:ine": 3
+    },
+    "test": {
+      "documentos": 4,
+      "modalidad:digital": 1,
+      "modalidad:escaneo": 1,
+      "modalidad:foto": 2,
+      "personas": 1,
+      "plantilla:comprobante_telefono": 1,
+      "plantilla:csf_constancia": 1,
+      "plantilla:curp_constancia": 1,
+      "plantilla:ine_credencial": 1,
+      "tipo:comprobante_domicilio": 1,
+      "tipo:csf": 1,
+      "tipo:curp": 1,
+      "tipo:ine": 1
+    }
+  },
+  "sepomex_sha256": "b102fb0b522cdf9bf50768b2830805f37077bd9b74f0a9291e7b2bbba671c23d",
+  "library_versions": {
+    "reportlab": "4.5.1",
+    "pypdfium2": "5.15.2",
+    "pillow": "11.3.0",
+    "numpy": "2.5.5",
+    "faker": "39.1.0",
+    "pydantic": "2.14.4"
+  }
+}

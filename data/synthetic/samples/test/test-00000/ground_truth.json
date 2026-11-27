@@ -1,0 +1,151 @@
+{
+  "persona_id": "test-00000",
+  "split": "test",
+  "form": {
+    "curp": "VAPA571213MTCLNR07",
+    "rfc": "VAPA571213JJ1",
+    "nombre": "ARACELI",
+    "apellido_paterno": "VALENTIN",
+    "apellido_materno": "PUENTE",
+    "fecha_nacimiento": "1957-12-13",
+    "nacionalidad": "MX",
+    "calle": "CALLE MAURICIO",
+    "numero_exterior": "3393",
+    "numero_interior": "C",
+    "colonia": "AJACACO",
+    "ciudad": "COXCATLAN",
+    "estado": "SAN LUIS POTOSI",
+    "codigo_postal": "79866"
+  },
+  "documents": [
+    {
+      "persona_id": "test-00000",
+      "doc_type": "curp",
+      "template": "curp_constancia",
+      "template_seen_in_train": true,
+      "modality": "digital",
+      "pdf": "test/test-00000/curp.pdf",
+      "image": null,
+      "fields": {
+        "curp": "VAPA571213MTCLNR07",
+        "nombre": "ARACELI",
+        "apellido_paterno": "VALENTIN",
+        "apellido_materno": "PUENTE",
+        "sexo": "MUJER",
+        "fecha_nacimiento": "13/12/1957",
+        "entidad_nacimiento": "TABASCO",
+        "nacionalidad": "MEXICANA"
+      },
+      "augmentation": {}
+    },
+    {
+      "persona_id": "test-00000",
+      "doc_type": "ine",
+      "template": "ine_credencial",
+      "template_seen_in_train": true,
+      "modality": "foto",
+      "pdf": "test/test-00000/ine.pdf",
+      "image": "test/test-00000/ine.jpg",
+      "fields": {
+        "nombre": "ARACELI",
+        "apellido_paterno": "VALENTIN",
+        "apellido_materno": "PUENTE",
+        "fecha_nacimiento": "13/12/1957",
+        "sexo": "M",
+        "curp": "VAPA571213MTCLNR07",
+        "calle": "C MAURICIO",
+        "numero_exterior": "3393",
+        "numero_interior": "C",
+        "colonia": "AJACACO",
+        "codigo_postal": "79866",
+        "ciudad": "COXCATLAN",
+        "estado": "SLP.",
+        "clave_elector": "VAPUAR57121327M088"
+      },
+      "augmentation": {
+        "rotation": 5.067682290569426,
+        "perspective": 0.04992464312493387,
+        "fill": 0.7920450980712174,
+        "light_min": 0.9475506174121813,
+        "shadow": 1.0,
+        "shadow_strength": 0.28849706984523404,
+        "blur": 0.5135623255276504,
+        "motion_blur": 2.0,
+        "noise": 3.0036814238477616,
+        "jpeg_quality": 80.0
+      }
+    },
+    {
+      "persona_id": "test-00000",
+      "doc_type": "csf",
+      "template": "csf_constancia",
+      "template_seen_in_train": true,
+      "modality": "escaneo",
+      "pdf": "test/test-00000/csf.pdf",
+      "image": "test/test-00000/csf.jpg",
+      "fields": {
+        "rfc": "VAPA571213JJ1",
+        "curp": "VAPA571213MTCLNR07",
+        "nombre": "ARACELI",
+        "apellido_paterno": "VALENTIN",
+        "apellido_materno": "PUENTE",
+        "codigo_postal": "79866",
+        "tipo_vialidad": "CALLE",
+        "nombre_vialidad": "MAURICIO",
+        "numero_exterior": "3393",
+        "numero_interior": "C",
+        "colonia": "AJACACO",
+        "ciudad": "COXCATLAN",
+        "municipio": "COXCATLAN",
+        "estado": "SAN LUIS POTOSI",
+        "calle": "CALLE MAURICIO"
+      },
+      "augmentation": {
+        "rotation": 0.9957154729624464,
+        "grayscale": 0.0,
+        "brightness": 0.959672123301255,
+        "contrast": 1.079074491846337,
+        "blur": 0.09804652930202651,
+        "noise": 1.8095432477149866,
+        "scale": 0.8185465999473448,
+        "jpeg_quality": 72.0
+      }
+    },
+    {
+      "persona_id": "test-00000",
+      "doc_type": "comprobante_domicilio",
+      "template": "comprobante_telefono",
+      "template_seen_in_train": false,
+      "modality": "foto",
+      "pdf": "test/test-00000/comprobante.pdf",
+      "image": "test/test-00000/comprobante.jpg",
+      "fields": {
+        "titular": "ARACELI VALENTIN PUENTE",
+        "calle": "CALLE MAURICIO",
+        "numero_exterior": "3393",
+        "numero_interior": "C",
+        "colonia": "AJACACO",
+        "codigo_postal": "79866",
+        "ciudad": "COXCATLAN",
+        "estado": "SAN LUIS POTOSI",
+        "fecha_emision": "2026-09-23"
+      },
+      "augmentation": {
+        "rotation": 0.7116898206238389,
+        "perspective": 0.0074768943928818065,
+        "fill": 0.8387193242234887,
+        "light_min": 0.6662713190718992,
+        "shadow": 0.0,
+        "shadow_strength": 0.0,
+        "blur": 1.1608282889075825,
+        "motion_blur": 0.0,
+        "noise": 7.781605974149383,
+        "jpeg_quality": 59.0
+      }
+    }
+  ],
+  "expected_warnings": [],
+  "tags": [
+    "numero_interior"
+  ]
+}
