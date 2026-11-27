@@ -11,6 +11,7 @@ Tipo de Vialidad: CALLE").
 """
 
 import io
+import re
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -18,7 +19,7 @@ from functools import cached_property
 
 from docextract.normalize import comparison_key
 
-__all__ = ["Line", "Segment", "TextLayout", "Word"]
+__all__ = ["Line", "Segment", "TextLayout", "Word", "split_glued"]
 
 
 @dataclass(frozen=True)
@@ -67,9 +68,39 @@ class Segment:
     x0: float
 
 
+GLUED_COLON = re.compile(r"(?:(?<=[^\W\d_])|(?<=\))):(?=\w)")
+"""Dos puntos entre una letra (o ")") y una letra o dígito: "Postal:63000"."""
+
+
+def split_glued(word: Word) -> list[Word]:
+    """Separa una etiqueta pegada a su valor: ``"Apellido:PEREZ"`` → ``"Apellido:"``,
+    ``"PEREZ"``.
+
+    pdfplumber junta en una palabra los caracteres separados por menos de 3 pt, y la
+    constancia del SAT deja a veces la etiqueta a menos de eso de su valor (un visor de PDF
+    sí muestra el espacio). No separa horas (``14:31``) ni URLs (``http://``). Las cajas de
+    las piezas se reparten en proporción a sus caracteres.
+
+    >>> [w.text for w in split_glued(Word("Postal:63000", 0, 60, 0, 10))]
+    ['Postal:', '63000']
+    >>> [w.text for w in split_glued(Word("14:31", 0, 25, 0, 10))]
+    ['14:31']
+    """
+    cuts = [m.end() for m in GLUED_COLON.finditer(word.text)]
+    if not cuts:
+        return [word]
+    pieces, start, n = [], 0, len(word.text)
+    per_char = (word.x1 - word.x0) / n
+    for cut in [*cuts, n]:
+        x0, x1 = word.x0 + start * per_char, word.x0 + cut * per_char
+        pieces.append(Word(word.text[start:cut], x0, x1, word.top, word.bottom))
+        start = cut
+    return pieces
+
+
 class TextLayout:
     def __init__(self, words: Iterable[Word], *, width: float = 0, height: float = 0) -> None:
-        self.words = tuple(w for w in words if w.text.strip())
+        self.words = tuple(piece for w in words if w.text.strip() for piece in split_glued(w))
         self.width = width
         self.height = height
 

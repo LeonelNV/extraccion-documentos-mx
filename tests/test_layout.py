@@ -2,6 +2,7 @@
 
 import io
 
+import pytest
 from reportlab.pdfgen.canvas import Canvas
 
 from docextract.layout import TextLayout, Word
@@ -76,6 +77,37 @@ def test_una_palabra_del_valor_no_es_etiqueta() -> None:
 
 def test_etiqueta_sin_dos_puntos_al_inicio_de_la_linea() -> None:
     assert layout("Primer apellido PEREZ").value(("Primer apellido",), VOCAB) == "PEREZ"
+
+
+def _pdf_etiqueta_pegada(gap: float) -> bytes:
+    """Etiqueta en negritas y valor a ``gap`` puntos, como en la constancia del SAT."""
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+
+    buffer = io.BytesIO()
+    canvas = Canvas(buffer, invariant=1)
+    pares = [("Primer Apellido:", "PEREZ"), ("Nombre (s):", "JUAN CARLOS"), ("RFC:", "X")]
+    for i, (etiqueta, valor) in enumerate(pares):
+        y = 700 - i * 14
+        canvas.setFont("Helvetica-Bold", 8)
+        canvas.drawString(50, y, etiqueta)
+        canvas.setFont("Helvetica", 8)
+        canvas.drawString(50 + stringWidth(etiqueta, "Helvetica-Bold", 8) + gap, y, valor)
+    canvas.save()
+    return buffer.getvalue()
+
+
+@pytest.mark.parametrize("gap", [0.0, 1.5, 4.0])
+def test_etiqueta_pegada_a_su_valor(gap: float) -> None:
+    # Con menos de 3 pt de separación pdfplumber entrega "Apellido:PEREZ" en una palabra.
+    lay = TextLayout.from_pdf(_pdf_etiqueta_pegada(gap))
+    vocab = (*VOCAB, "Nombre (s)", "RFC")
+    assert lay.value(("Primer apellido",), vocab) == "PEREZ"
+    assert lay.value(("Nombre (s)",), vocab) == "JUAN CARLOS"
+
+
+def test_no_separa_horas_ni_urls() -> None:
+    lay = layout("Sello: 2026/08/12 14:31:01 http://sat.gob.mx")
+    assert lay.lines[0].text == "Sello: 2026/08/12 14:31:01 http://sat.gob.mx"
 
 
 def test_desde_pdf_con_varias_paginas() -> None:
