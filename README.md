@@ -77,6 +77,10 @@ data/real/        ignorada por git; nunca se versiona
 tests/            pruebas
 ```
 
+## Trabajo futuro
+
+- **Verificación de autenticidad vía QR del SAT.** La Constancia de Situación Fiscal trae un código QR del SAT. Leerlo y consultarlo permitiría confirmar que la constancia es auténtica, y no solo que sus datos son coherentes. No está implementado: por ahora el sistema no lee códigos QR. Los QR de los documentos sintéticos solo contienen datos de muestra.
+
 ## Licencia
 
 [MIT](LICENSE)
