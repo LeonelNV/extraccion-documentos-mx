@@ -1,0 +1,51 @@
+[project]
+name = "docextract"
+version = "0.1.0"
+description = "Extracción automática de datos de documentos oficiales mexicanos (CURP, INE, CSF y comprobante de domicilio) con datos sintéticos."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "LeonelNV" }]
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.9,<3",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4",
+    "pytest>=8",
+    "ruff>=0.8",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.10,<0.14.0"]
+build-backend = "uv_build"
+
+# ---------------------------------------------------------------------------
+# Ruff
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle
+    "W",   # pycodestyle (advertencias)
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "RUF", # reglas propias de ruff
+]
+
+# ---------------------------------------------------------------------------
+# Pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["scripts"]
+addopts = ["-ra", "--strict-markers"]
