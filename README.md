@@ -6,7 +6,12 @@ Extracción automática de datos de documentos oficiales mexicanos (CURP, INE, C
 
 ## Estado
 
-En desarrollo, en la **fase 1 de 9**: esqueleto del repo, herramientas, CI y esquemas de salida. Todavía no hay extractores ni resultados; las métricas se publicarán aquí cuando las genere `make eval`.
+En desarrollo, en la **fase 2 de 9**. Ya están:
+
+- el esqueleto del repo, las herramientas, la CI y los esquemas de salida (fase 1);
+- los validadores y la normalización (fase 2): CURP y RFC con dígito verificador, nombres entre documentos, domicilio contra el catálogo de SEPOMEX y antigüedad del comprobante. Las reglas, sus fuentes y lo que no se pudo verificar están en [docs/validaciones.md](docs/validaciones.md).
+
+Todavía no hay extractores ni resultados; las métricas se publicarán aquí cuando las genere `make eval`.
 
 ## Cómo va a funcionar
 
@@ -46,10 +51,13 @@ Requisitos: [uv](https://docs.astral.sh/uv/), git y make (en Windows: `winget in
 
 ```bash
 make install   # dependencias fijadas en uv.lock y hooks de pre-commit
+make sepomex   # catálogo de códigos postales (no se versiona; ver docs/validaciones.md)
 make test      # pruebas
 make lint      # ruff
 make help      # todos los objetivos
 ```
+
+Sin el catálogo de SEPOMEX las pruebas pasan igual: usan un catálogo ficticio, y las dos pruebas contra el catálogo real se omiten.
 
 ## Estructura
 
