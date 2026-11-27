@@ -3,7 +3,7 @@
 # las muestra `make help`.
 
 .DEFAULT_GOAL := help
-.PHONY: help install lint format test check-data ci synth eval api
+.PHONY: help install lint format test check-data ci sepomex verificar-claves synth eval api
 
 help: ## Muestra esta ayuda
 	@uv run --no-project python scripts/make_help.py Makefile
@@ -27,6 +27,12 @@ check-data: ## Revisa que no haya documentos reales en todo el historial de git
 	uv run python scripts/check_no_real_data.py --history
 
 ci: lint check-data test ## Lo mismo que corre CI
+
+sepomex: ## Descarga el catálogo de códigos postales de SEPOMEX a data/sepomex/
+	uv run python scripts/download_sepomex.py
+
+verificar-claves: ## Comprueba los dígitos verificadores con CURPs/RFCs reales (solo imprime conteos)
+	uv run python scripts/verificar_claves.py
 
 synth: ## Genera los datos sintéticos (fase 3)
 	@echo Pendiente: se implementa en la fase 3.
