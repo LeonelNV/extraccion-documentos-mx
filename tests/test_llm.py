@@ -432,3 +432,22 @@ def test_domicilio_con_las_convenciones_de_las_reglas(leido: dict, esperado: dic
     fields = build_fields(DocType.COMPROBANTE_DOMICILIO, raw, catalog=None)
     assert {k: fields[k].value for k in esperado} == esperado
     assert fields["colonia"].value == "LOS MANGOS"
+
+
+def test_nombre_completo_en_el_campo_nombre_se_divide_con_la_curp() -> None:
+    # Visto en val: el modelo repite los apellidos en "nombre".
+    raw = _raw(DocType.CURP, curp=CURP, nombre="GERARDO CARLOS DEL RIO MAGAÑA")
+    raw.update(apellido_paterno="DEL RIO", apellido_materno="MAGAÑA")
+    fields = build_fields(DocType.CURP, raw, catalog=None)
+    assert {k: fields[k].value for k in NOMBRES} == NOMBRES
+    assert fields["nombre"].confidence == Confianza.VALIDADO
+    # Sin apellidos, el nombre completo se divide con la CURP si hay una sola división.
+    raw.update(apellido_paterno=None, apellido_materno=None)
+    raw["curp"], raw["nombre"] = "SOGR850101HNTRNM05", "RAMON SORIA GONZALES"
+    fields = build_fields(DocType.CURP, raw, catalog=None)
+    divididos = {k: fields[k].value for k in NOMBRES}
+    assert divididos == {
+        "nombre": "RAMON",
+        "apellido_paterno": "SORIA",
+        "apellido_materno": "GONZALES",
+    }

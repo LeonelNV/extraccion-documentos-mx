@@ -153,28 +153,73 @@ def _nombres(
 ) -> dict[str, ExtractedField]:
     """Nombre y apellidos contra la CURP del documento.
 
-    Si no coinciden, se prueba el orden de los tres valores que reproduce las letras de la
-    CURP (``split_full_name``, como el parser de la INE): el modelo a veces intercambia
-    nombre y apellidos, sobre todo en la INE, que imprime primero los apellidos.
+    Si no coinciden (o falta un apellido), se busca con ``split_full_name``, como el parser
+    de la INE, la división que reproduce las letras de la CURP:
+
+    1. del valor de ``nombre`` solo, por si el modelo puso ahí el nombre completo;
+    2. de los tres valores en cualquier orden, por si los intercambió (la INE imprime
+       primero los apellidos).
+
+    Solo se acepta si hay una única división posible.
     """
     nombres = {k: raw.get(k) for k in NOMBRE_FIELDS}
+    nombres["nombre"] = _sin_apellidos(
+        nombres["nombre"], nombres["apellido_paterno"], nombres["apellido_materno"]
+    )
+    sin_validar = {
+        k: field(v, CONFIANZA_MODELO if v is not None else 0.0) for k, v in nombres.items()
+    }
+    if info is None or not nombres["nombre"]:
+        return sin_validar
+    warnings: list = []
     # La CURP solo se compara con los tres (el segundo apellido puede ser "").
-    comparable = nombres["nombre"] and nombres["apellido_paterno"]
-    if info is None or not comparable or nombres["apellido_materno"] is None:
-        return {k: field(v, CONFIANZA_MODELO if v is not None else 0.0) for k, v in nombres.items()}
-    warnings = check_curp_consistency(info, **nombres, docs=(doc_type,))
-    if not warnings:
-        return {k: field(v, Confianza.VALIDADO) for k, v in nombres.items()}
+    if nombres["apellido_paterno"] and nombres["apellido_materno"] is not None:
+        warnings = check_curp_consistency(info, **nombres, docs=(doc_type,))
+        if not warnings:
+            return {k: field(v, Confianza.VALIDADO) for k, v in nombres.items()}
+
+    def unica(textos) -> tuple[str, str, str] | None:
+        divisiones = set()
+        for texto in textos:
+            split, ambiguo = split_full_name(texto, curp or "")
+            if split and not ambiguo:
+                divisiones.add(split)
+        return divisiones.pop() if len(divisiones) == 1 else None
+
     partes = [v for v in nombres.values() if v]
-    divisiones = set()
-    for orden in itertools.permutations(partes):
-        split, ambiguo = split_full_name(" ".join(orden), curp or "")
-        if split and not ambiguo:
-            divisiones.add(split)
-    if len(divisiones) == 1:
-        split = divisiones.pop()
+    split = unica([nombres["nombre"]]) if len(nombres["nombre"].split()) >= 2 else None
+    split = split or unica(" ".join(orden) for orden in itertools.permutations(partes))
+    if split:
         return {k: field(v, Confianza.VALIDADO) for k, v in zip(NOMBRE_FIELDS, split, strict=True)}
-    return {k: field(v, Confianza.INCONSISTENTE, warnings) for k, v in nombres.items()}
+    if warnings:
+        return {k: field(v, Confianza.INCONSISTENTE, warnings) for k, v in nombres.items()}
+    return sin_validar
+
+
+def _sin_apellidos(nombre: str | None, paterno: str | None, materno: str | None) -> str | None:
+    """Quita los apellidos que el modelo repitió en ``nombre``, al final o al principio y
+    en cualquier orden (visto en val con Nova).
+
+    >>> _sin_apellidos("RAMON SORIA GONZALES", "SORIA", "GONZALES")
+    'RAMON'
+    >>> _sin_apellidos("SORIA GONZALES RAMON", "SORIA", "GONZALES")
+    'RAMON'
+    >>> _sin_apellidos("RAMON GONZALES SORIA", "SORIA", "GONZALES")
+    'RAMON'
+    >>> _sin_apellidos("JUAN CARLOS", "SORIA", "")
+    'JUAN CARLOS'
+    """
+    if not nombre or not paterno:
+        return nombre
+    tokens = nombre.split()
+    for apellidos in (f"{paterno} {materno or ''}".split(), f"{materno or ''} {paterno}".split()):
+        n = len(apellidos)
+        if len(tokens) > n:
+            if tokens[-n:] == apellidos:
+                return " ".join(tokens[:-n])
+            if tokens[:n] == apellidos:
+                return " ".join(tokens[n:])
+    return nombre
 
 
 _PREFIJO_INTERIOR = re.compile(r"^INT(?:ERIOR)?\.?\s*", re.IGNORECASE)
