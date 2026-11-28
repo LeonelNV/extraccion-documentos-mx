@@ -8,8 +8,8 @@ campos del tipo de documento. La respuesta es un dict que después valida pydant
 Decisiones:
 
 * **Solo modelos que corren en la región** (us-east-1). Los perfiles de inferencia entre
-  regiones (``us.``) reparten las llamadas a otras regiones, y una política de la
-  organización de la cuenta niega invocar fuera de us-east-1.
+  regiones (``us.``) reparten las llamadas a otras regiones, que la cuenta usada no
+  permite.
 * ``maxTokens`` explícito y temperatura 0: sin ``maxTokens`` Bedrock reserva el máximo del
   modelo contra la cuota.
 * Reintentos adaptativos de botocore para ``ThrottlingException`` y errores 5xx; los
