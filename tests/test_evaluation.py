@@ -75,11 +75,14 @@ def resumen() -> dict:
 
 
 def test_resumen_de_las_muestras(resumen: dict) -> None:
+    # Sin OCR: solo se extraen los digitales (los de imagen requieren Tesseract).
     assert resumen["documentos"] == 16
     assert resumen["router"]["exactitud"] == 1.0
-    assert resumen["clasificador_texto"]["exactitud"] == 1.0
-    assert set(resumen["parsers"]) == {"curp", "csf"}
-    for data in resumen["parsers"].values():
+    assert resumen["clasificador_palabras_clave"]["texto"]["exactitud"] == 1.0
+    assert set(resumen["extraccion"]) == {"curp", "csf", "ine", "comprobante_domicilio"}
+    for por_modalidad in resumen["extraccion"].values():
+        data = por_modalidad["digital"]
+        assert data["extractor"] == "texto_reglas"
         assert data["documentos_100"] == 1.0
         assert data["costo_usd_por_documento"] == 0.0
         assert data["latencia_p95_ms"] >= data["latencia_p50_ms"] > 0
@@ -89,20 +92,23 @@ def test_resumen_de_las_muestras(resumen: dict) -> None:
 def test_markdown_y_csv(resumen: dict) -> None:
     markdown = to_markdown(resumen, title="Prueba")
     assert "| Router (texto vs. imagen) | 16 | 100.0% |" in markdown
-    assert "## Parser de texto: curp" in markdown
-    rows = to_csv_rows(resumen, extractor="texto_reglas", split="train")
-    assert {r["doc_type"] for r in rows} == {"curp", "csf"}
+    assert "## curp: exactitud por campo" in markdown
+    assert "| curp | digital | `texto_reglas` |" in markdown
+    rows = to_csv_rows(resumen, split="train")
+    assert {r["doc_type"] for r in rows} == {"curp", "csf", "ine", "comprobante_domicilio"}
+    assert {r["modalidad"] for r in rows} == {"digital"}
     assert all(r["costo_usd"] == 0.0 for r in rows)
 
 
 def test_cli_escribe_los_reportes(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    assert evaluate.main(["--data", str(SAMPLES), "--split", "train", "--out", str(tmp_path)]) == 0
+    args = ["--data", str(SAMPLES), "--split", "train", "--out", str(tmp_path), "--sin-ocr"]
+    assert evaluate.main(args) == 0
     assert (tmp_path / "resultados.md").read_text(encoding="utf-8").startswith("# Resultados")
     assert "exactitud" in (tmp_path / "resultados.csv").read_text(encoding="utf-8")
     runs = list((tmp_path / "runs").glob("*_train.json"))
     assert len(runs) == 1
     run = json.loads(runs[0].read_text(encoding="utf-8"))
-    assert run["extractor"] == "texto_reglas"
+    assert run["extractores"] == ["texto_reglas"]
     assert "resumen" in run
 
 

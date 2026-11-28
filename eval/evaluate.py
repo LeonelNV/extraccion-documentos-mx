@@ -1,7 +1,12 @@
-"""Evalúa la ruta de texto sobre el dataset sintético y escribe ``reports/``.
+"""Evalúa la ruta de texto y el extractor A (OCR + reglas) sobre el dataset sintético.
 
     uv run python eval/evaluate.py                      # split test (lo que reporta make eval)
     uv run python eval/evaluate.py --split val --errores 10 --no-save   # desarrollo
+    uv run python eval/evaluate.py --sin-ocr            # solo la ruta de texto (rápido)
+
+El OCR de los escaneos y fotos se guarda en ``data/cache/ocr/`` (ignorado por git), por
+hash del PDF y configuración: la segunda corrida no vuelve a leer las imágenes. La latencia
+reportada es la medida al hacer el OCR.
 
 Escribe:
 
@@ -28,9 +33,11 @@ from docextract.evaluation import (
     to_csv_rows,
     to_markdown,
 )
-from docextract.parsers import EXTRACTOR_NAME
+from docextract.extractors.ocr_rules import OcrRulesExtractor
+from docextract.ocr import OcrCache, OcrConfig, find_tesseract, ocr_many
 
 ROOT = Path(__file__).resolve().parents[1]
+CACHE_DIR = ROOT / "data" / "cache" / "ocr"
 
 
 def _git_commit() -> str | None:
@@ -55,6 +62,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--data", type=Path, default=ROOT / "data" / "synthetic")
     parser.add_argument("--split", default="test", choices=("train", "val", "test"))
     parser.add_argument("--out", type=Path, default=ROOT / "reports")
+    parser.add_argument("--cache", type=Path, default=CACHE_DIR)
+    parser.add_argument("--workers", type=int, default=4, help="procesos para el OCR")
+    parser.add_argument("--sin-ocr", action="store_true", help="solo la ruta de texto")
     parser.add_argument("--no-save", action="store_true", help="solo imprime el resumen")
     parser.add_argument("--errores", type=int, default=0, help="muestra N campos con error")
     args = parser.parse_args(argv)
@@ -64,15 +74,24 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     documents = load_manifest(args.data, args.split)
 
+    ocr = None
+    if not args.sin_ocr:
+        find_tesseract()  # falla pronto y con instrucciones si no está instalado
+        config = OcrConfig()
+        cache = OcrCache(args.cache)
+        imagen = [args.data / d.pdf for d in documents if d.image]
+        ocr_many(imagen, cache, config, workers=args.workers)
+        ocr = OcrRulesExtractor(config=config, cache=cache)
+
     def progress(i: int) -> None:
         if i % 100 == 0 or i == len(documents):
             print(f"  {i}/{len(documents)} documentos", end="\r", flush=True)
 
-    evals = evaluate_documents(args.data, documents, progress=progress)
+    evals = evaluate_documents(args.data, documents, ocr=ocr, progress=progress)
     print()
     summary = summarize(evals)
-    title = f"Resultados: ruta de texto ({EXTRACTOR_NAME}), split {args.split}"
-    markdown = to_markdown(summary, title=title)
+    ruta = "ruta de texto" if args.sin_ocr else "ruta de texto y extractor A (OCR + reglas)"
+    markdown = to_markdown(summary, title=f"Resultados: {ruta}, split {args.split}")
     print(markdown)
 
     if args.errores:
@@ -81,7 +100,7 @@ def main(argv: list[str] | None = None) -> int:
             for name, f in e.fields.items():
                 if not f.match and shown < args.errores:
                     # Datos sintéticos: se pueden mostrar. eval_private.py nunca lo hace.
-                    ident = f"{e.truth.persona_id} {e.truth.doc_type} {name}"
+                    ident = f"{e.truth.persona_id} {e.truth.doc_type} {e.truth.modality} {name}"
                     print(f"  {ident}: {f.predicted!r} vs {f.truth!r}")
                     shown += 1
 
@@ -89,7 +108,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "resultados.md").write_text(markdown, encoding="utf-8")
-    rows = to_csv_rows(summary, extractor=EXTRACTOR_NAME, split=args.split)
+    rows = to_csv_rows(summary, split=args.split)
     with (args.out / "resultados.csv").open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=list(rows[0]) if rows else ["extractor"])
         writer.writeheader()
@@ -105,7 +124,8 @@ def main(argv: list[str] | None = None) -> int:
     run = {
         "fecha_utc": now.isoformat(timespec="seconds"),
         "commit": _git_commit(),
-        "extractor": EXTRACTOR_NAME,
+        "extractores": ["texto_reglas"] + ([] if args.sin_ocr else ["ocr_reglas"]),
+        "ocr": None if args.sin_ocr else OcrConfig().key(),
         "split": args.split,
         "dataset": {
             "semilla": dataset.seed if dataset else None,

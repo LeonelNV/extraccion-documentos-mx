@@ -1,12 +1,16 @@
-"""Evaluación de la ruta de texto sobre el dataset sintético (``make eval``).
+"""Evaluación sobre el dataset sintético (``make eval``).
 
-Mide, sobre un split:
+Cada documento va por su ruta: los digitales por la capa de texto (``texto_reglas``) y los
+escaneos y fotos por el extractor A (``ocr_reglas``: OCR + las mismas reglas). Mide, sobre
+un split:
 
 - **Router:** si cada documento fue por la ruta correcta (digital → texto; escaneo y foto →
   imagen).
-- **Clasificador de texto:** si reconoce el tipo de los documentos que van por texto.
-- **Parsers:** exactitud por campo tras normalizar, CER, porcentaje de documentos con todos
-  los campos correctos y latencia p50/p95 (lectura del PDF + clasificación + parser).
+- **Clasificador de palabras clave:** si reconoce el tipo, por separado con el texto del PDF
+  y con el del OCR.
+- **Extracción, por tipo de documento y modalidad:** exactitud por campo tras normalizar,
+  CER, porcentaje de documentos con todos los campos correctos y latencia p50/p95 (lectura
+  del PDF, OCR si aplica, clasificación y parser).
 
 Comparación tras normalizar: nombres y texto con la clave de comparación, domicilio con las
 abreviaturas expandidas, fechas como fecha, CP a 5 dígitos, estado como entidad e
@@ -24,6 +28,8 @@ from rapidfuzz.distance import Levenshtein
 
 from docextract.dataset import DocumentTruth, Modality
 from docextract.entidades import find_entidad
+from docextract.extractors.ocr_rules import NAME as OCR_NAME
+from docextract.extractors.ocr_rules import OcrRulesExtractor
 from docextract.normalize import (
     address_key,
     clean_identifier,
@@ -31,12 +37,14 @@ from docextract.normalize import (
     normalize_codigo_postal,
     parse_date,
 )
-from docextract.parsers import PARSERS, extract_text_route
+from docextract.parsers import EXTRACTOR_NAME, PARSERS, extract_text_route
 from docextract.router import RouteKind
+from docextract.schemas import DocType
 
 __all__ = [
     "DocumentEval",
     "cer",
+    "evaluate_document",
     "evaluate_documents",
     "field_matches",
     "load_manifest",
@@ -119,6 +127,8 @@ class DocumentEval:
     predicted_type: str | None
     fields: dict[str, FieldEval] = field(default_factory=dict)
     latency_ms: float | None = None
+    extractor: str | None = None
+    """``texto_reglas``, ``ocr_reglas`` o ``None`` si no se leyó el texto."""
 
     @property
     def route_ok(self) -> bool:
@@ -140,21 +150,33 @@ def load_manifest(root: Path, split: str) -> list[DocumentTruth]:
     return [DocumentTruth.model_validate_json(line) for line in lines if line.strip()]
 
 
-def evaluate_document(root: Path, truth: DocumentTruth) -> DocumentEval:
+def evaluate_document(
+    root: Path, truth: DocumentTruth, *, ocr: OcrRulesExtractor | None = None
+) -> DocumentEval:
+    """Lee el documento por su ruta. Sin ``ocr``, los documentos de imagen no se extraen."""
     pdf = (root / truth.pdf).read_bytes()
     start = time.perf_counter()
     out = extract_text_route(pdf, truth.doc_type)
     latency = (time.perf_counter() - start) * 1000
+    classification, result, extractor = out.classification, out.result, EXTRACTOR_NAME
+    if out.route.kind is RouteKind.IMAGE:
+        if ocr is None:
+            return DocumentEval(truth, out.route.kind, None)
+        image = ocr.extract_pdf(pdf, truth.doc_type)
+        classification, result, extractor = image.classification, image.result, OCR_NAME
+        # La latencia del OCR es la medida al leer, también cuando viene de la caché.
+        if result is not None:
+            latency += result.latency_ms or 0.0
     predicted_type = None
-    if out.classification is not None and out.classification.doc_type is not None:
-        predicted_type = out.classification.doc_type.value
-    if out.result is None:
-        return DocumentEval(truth, out.route.kind, predicted_type)
+    if classification is not None and classification.doc_type is not None:
+        predicted_type = classification.doc_type.value
+    if result is None:
+        return DocumentEval(truth, out.route.kind, predicted_type, extractor=extractor)
     fields = {}
     for name in PARSERS[truth.doc_type].fields:
         if name not in truth.fields:
             continue
-        extracted = out.result.fields.get(name)
+        extracted = result.fields.get(name)
         predicted = extracted.value if extracted else None
         fields[name] = FieldEval(
             match=field_matches(name, predicted, truth.fields[name]),
@@ -163,18 +185,19 @@ def evaluate_document(root: Path, truth: DocumentTruth) -> DocumentEval:
             predicted=predicted,
             truth=truth.fields[name],
         )
-    return DocumentEval(truth, out.route.kind, predicted_type, fields, latency)
+    return DocumentEval(truth, out.route.kind, predicted_type, fields, latency, extractor)
 
 
 def evaluate_documents(
     root: Path,
     documents: Iterable[DocumentTruth],
     *,
+    ocr: OcrRulesExtractor | None = None,
     progress: Callable[[int], None] | None = None,
 ) -> list[DocumentEval]:
     results = []
     for i, truth in enumerate(documents, 1):
-        results.append(evaluate_document(root, truth))
+        results.append(evaluate_document(root, truth, ocr=ocr))
         if progress:
             progress(i)
     return results
@@ -183,71 +206,106 @@ def evaluate_documents(
 # ---------------------------------------------------------------------------
 # Resumen
 # ---------------------------------------------------------------------------
+MODALIDADES = tuple(m.value for m in Modality)
+RUTAS = {"texto": EXTRACTOR_NAME, "ocr": OCR_NAME}
+
+
 def _percentile(values: list[float], q: float) -> float:
+    if not values:
+        return 0.0
     if len(values) == 1:
         return values[0]
     return statistics.quantiles(values, n=100, method="inclusive")[int(q) - 1]
 
 
-def _no_vista(text_docs: list[DocumentEval]) -> dict[str, float] | None:
-    docs = [e for e in text_docs if not e.truth.template_seen_in_train]
-    if not docs:
-        return None
-    ok = sum(e.predicted_type == e.truth.doc_type.value for e in docs)
-    return {"documentos": len(docs), "exactitud": ok / len(docs)}
+def _accuracy(docs: list[DocumentEval]) -> float:
+    return sum(e.predicted_type == e.truth.doc_type.value for e in docs) / len(docs)
+
+
+def _classifier(docs: list[DocumentEval]) -> dict[str, object]:
+    por_tipo: dict[str, list[DocumentEval]] = defaultdict(list)
+    for e in docs:
+        por_tipo[e.truth.doc_type.value].append(e)
+    no_vista = [e for e in docs if not e.truth.template_seen_in_train]
+    return {
+        "documentos": len(docs),
+        "exactitud": _accuracy(docs),
+        "por_tipo": {t: _accuracy(d) for t, d in sorted(por_tipo.items())},
+        # Generalización: documentos cuya plantilla no aparece en train.
+        "plantilla_no_vista": (
+            {"documentos": len(no_vista), "exactitud": _accuracy(no_vista)} if no_vista else None
+        ),
+    }
+
+
+def _extraction(docs: list[DocumentEval], doc_type: DocType) -> dict[str, object]:
+    por_campo: dict[str, dict[str, float]] = {}
+    for name in PARSERS[doc_type].fields:
+        values = [e.fields[name] for e in docs if name in e.fields]
+        if values:
+            por_campo[name] = {
+                "n": len(values),
+                "exactitud": sum(v.match for v in values) / len(values),
+                "cer": statistics.fmean(v.cer for v in values),
+            }
+    latencias = [e.latency_ms for e in docs if e.latency_ms is not None]
+    return {
+        "extractor": docs[0].extractor,
+        "documentos": len(docs),
+        "documentos_100": sum(e.all_correct for e in docs) / len(docs),
+        "latencia_p50_ms": _percentile(latencias, 50),
+        "latencia_p95_ms": _percentile(latencias, 95),
+        "costo_usd_por_documento": 0.0,
+        "campos": por_campo,
+    }
 
 
 def summarize(evals: list[DocumentEval]) -> dict[str, object]:
     """Métricas agregadas, listas para JSON."""
     router_ok = sum(e.route_ok for e in evals)
     confusion = Counter(f"{e.truth.modality}->{e.route}" for e in evals)
-    text_docs = [e for e in evals if e.route is RouteKind.TEXT]
-    clasif_por_tipo: dict[str, list[bool]] = defaultdict(list)
-    for e in text_docs:
-        clasif_por_tipo[e.truth.doc_type.value].append(e.predicted_type == e.truth.doc_type.value)
-
-    parsers: dict[str, object] = {}
+    clasificador = {}
+    for ruta, name in RUTAS.items():
+        docs = [e for e in evals if e.extractor == name]
+        if docs:
+            clasificador[ruta] = _classifier(docs)
+    extraccion: dict[str, dict[str, object]] = {}
     for doc_type in PARSERS:
-        docs = [e for e in evals if e.truth.doc_type is doc_type and e.parsed]
-        if not docs:
-            continue
-        por_campo: dict[str, dict[str, float]] = {}
-        for name in PARSERS[doc_type].fields:
-            values = [e.fields[name] for e in docs if name in e.fields]
-            if values:
-                por_campo[name] = {
-                    "n": len(values),
-                    "exactitud": sum(v.match for v in values) / len(values),
-                    "cer": statistics.fmean(v.cer for v in values),
-                }
-        latencias = [e.latency_ms for e in docs if e.latency_ms is not None]
-        parsers[doc_type.value] = {
-            "documentos": len(docs),
-            "documentos_100": sum(e.all_correct for e in docs) / len(docs),
-            "latencia_p50_ms": _percentile(latencias, 50),
-            "latencia_p95_ms": _percentile(latencias, 95),
-            "costo_usd_por_documento": 0.0,
-            "campos": por_campo,
-        }
-
+        por_modalidad = {}
+        for modalidad in MODALIDADES:
+            docs = [
+                e
+                for e in evals
+                if e.truth.doc_type is doc_type and e.truth.modality == modalidad and e.parsed
+            ]
+            if docs:
+                por_modalidad[modalidad] = _extraction(docs, doc_type)
+        if por_modalidad:
+            extraccion[doc_type.value] = por_modalidad
+    no_vista: dict[str, dict[str, float]] = {}
+    for modalidad in MODALIDADES:
+        docs = [
+            e
+            for e in evals
+            if not e.truth.template_seen_in_train and e.truth.modality == modalidad and e.parsed
+        ]
+        if docs:
+            campos = [f.match for e in docs for f in e.fields.values()]
+            no_vista[modalidad] = {
+                "documentos": len(docs),
+                "documentos_100": sum(e.all_correct for e in docs) / len(docs),
+                "exactitud_campos": sum(campos) / len(campos),
+            }
     return {
         "documentos": len(evals),
         "router": {
             "exactitud": router_ok / len(evals) if evals else 0.0,
             "matriz": dict(sorted(confusion.items())),
         },
-        "clasificador_texto": {
-            "documentos": len(text_docs),
-            "exactitud": (
-                sum(ok for oks in clasif_por_tipo.values() for ok in oks) / len(text_docs)
-                if text_docs
-                else 0.0
-            ),
-            "por_tipo": {t: sum(oks) / len(oks) for t, oks in sorted(clasif_por_tipo.items())},
-            # Generalización: documentos cuya plantilla no aparece en train.
-            "plantilla_no_vista": _no_vista(text_docs),
-        },
-        "parsers": parsers,
+        "clasificador_palabras_clave": clasificador,
+        "extraccion": extraccion,
+        # Generalización de la extracción al diseño de comprobante que no está en train.
+        "extraccion_plantilla_no_vista": no_vista,
     }
 
 
@@ -257,61 +315,99 @@ def _pct(value: float) -> str:
 
 def to_markdown(summary: dict, *, title: str) -> str:
     router = summary["router"]
-    clasif = summary["clasificador_texto"]
     lines = [
         f"# {title}",
         "",
-        "Generado por `make eval`. No editar a mano.",
+        "Generado por `make eval`. No editar a mano. Los documentos digitales van por la capa "
+        "de texto (`texto_reglas`); los escaneos y fotos, por el extractor A (`ocr_reglas`: "
+        "Tesseract + las mismas reglas). Costo: $0 (sin servicios externos).",
         "",
-        "## Router y clasificador",
+        "## Resumen por documento y modalidad",
+        "",
+        "| Documento | Modalidad | Extractor | Documentos | 100% correctos | p50 | p95 |",
+        "|---|---|---|---:|---:|---:|---:|",
+    ]
+    for doc_type, modalidades in summary["extraccion"].items():
+        for modalidad, data in modalidades.items():
+            lines.append(
+                f"| {doc_type} | {modalidad} | `{data['extractor']}` | {data['documentos']} | "
+                f"{_pct(data['documentos_100'])} | {data['latencia_p50_ms']:.0f} ms | "
+                f"{data['latencia_p95_ms']:.0f} ms |"
+            )
+    if no_vista := summary.get("extraccion_plantilla_no_vista"):
+        lines += [
+            "",
+            "## Comprobante de diseño no visto en train",
+            "",
+            "Las reglas del comprobante se escribieron sin este diseño: mide la generalización.",
+            "",
+            "| Modalidad | Documentos | 100% correctos | Campos correctos |",
+            "|---|---:|---:|---:|",
+        ]
+        for modalidad, data in no_vista.items():
+            lines.append(
+                f"| {modalidad} | {data['documentos']} | {_pct(data['documentos_100'])} | "
+                f"{_pct(data['exactitud_campos'])} |"
+            )
+    lines += [
+        "",
+        "## Router y clasificador de palabras clave",
         "",
         "| Métrica | Documentos | Exactitud |",
         "|---|---:|---:|",
         f"| Router (texto vs. imagen) | {summary['documentos']} | {_pct(router['exactitud'])} |",
-        f"| Clasificador de texto | {clasif['documentos']} | {_pct(clasif['exactitud'])} |",
     ]
-    for doc_type, acc in clasif["por_tipo"].items():
-        lines.append(f"| Clasificador: {doc_type} | | {_pct(acc)} |")
-    if no_vista := clasif.get("plantilla_no_vista"):
+    for ruta, clasif in summary["clasificador_palabras_clave"].items():
+        origen = "PDF" if ruta == "texto" else "OCR"
         lines.append(
-            f"| Clasificador: plantilla no vista en train | {no_vista['documentos']} | "
-            f"{_pct(no_vista['exactitud'])} |"
+            f"| Clasificador, texto del {origen} | {clasif['documentos']} | "
+            f"{_pct(clasif['exactitud'])} |"
         )
-    for doc_type, data in summary["parsers"].items():
+        for doc_type, acc in clasif["por_tipo"].items():
+            lines.append(f"| · {doc_type} | | {_pct(acc)} |")
+        if no_vista := clasif.get("plantilla_no_vista"):
+            lines.append(
+                f"| · plantilla no vista en train | {no_vista['documentos']} | "
+                f"{_pct(no_vista['exactitud'])} |"
+            )
+    for doc_type, modalidades in summary["extraccion"].items():
+        nombres: list[str] = []
+        for data in modalidades.values():
+            nombres += [n for n in data["campos"] if n not in nombres]
         lines += [
             "",
-            f"## Parser de texto: {doc_type}",
+            f"## {doc_type}: exactitud por campo",
             "",
-            f"{data['documentos']} documentos digitales · {_pct(data['documentos_100'])} con todos "
-            f"los campos correctos · latencia p50 {data['latencia_p50_ms']:.0f} ms, "
-            f"p95 {data['latencia_p95_ms']:.0f} ms · costo $0",
-            "",
-            "| Campo | n | Exactitud | CER |",
-            "|---|---:|---:|---:|",
+            "| Campo | " + " | ".join(modalidades) + " |",
+            "|---|" + "---:|" * len(modalidades),
         ]
-        for name, values in data["campos"].items():
-            lines.append(
-                f"| {name} | {values['n']} | {_pct(values['exactitud'])} | {values['cer']:.3f} |"
-            )
+        for name in nombres:
+            cells = []
+            for data in modalidades.values():
+                v = data["campos"].get(name)
+                cells.append(f"{_pct(v['exactitud'])} (CER {v['cer']:.3f})" if v else "")
+            lines.append(f"| {name} | " + " | ".join(cells) + " |")
     return "\n".join(lines) + "\n"
 
 
-def to_csv_rows(summary: dict, *, extractor: str, split: str) -> list[dict[str, object]]:
+def to_csv_rows(summary: dict, *, split: str) -> list[dict[str, object]]:
     rows = []
-    for doc_type, data in summary["parsers"].items():
-        for name, values in data["campos"].items():
-            rows.append(
-                {
-                    "extractor": extractor,
-                    "split": split,
-                    "doc_type": doc_type,
-                    "campo": name,
-                    "n": values["n"],
-                    "exactitud": round(values["exactitud"], 4),
-                    "cer": round(values["cer"], 4),
-                    "latencia_p50_ms": round(data["latencia_p50_ms"], 1),
-                    "latencia_p95_ms": round(data["latencia_p95_ms"], 1),
-                    "costo_usd": 0.0,
-                }
-            )
+    for doc_type, modalidades in summary["extraccion"].items():
+        for modalidad, data in modalidades.items():
+            for name, values in data["campos"].items():
+                rows.append(
+                    {
+                        "extractor": data["extractor"],
+                        "split": split,
+                        "doc_type": doc_type,
+                        "modalidad": modalidad,
+                        "campo": name,
+                        "n": values["n"],
+                        "exactitud": round(values["exactitud"], 4),
+                        "cer": round(values["cer"], 4),
+                        "latencia_p50_ms": round(data["latencia_p50_ms"], 1),
+                        "latencia_p95_ms": round(data["latencia_p95_ms"], 1),
+                        "costo_usd": 0.0,
+                    }
+                )
     return rows

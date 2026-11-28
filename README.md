@@ -6,32 +6,54 @@ Extracción automática de datos de documentos oficiales mexicanos (CURP, INE, C
 
 ## Estado
 
-En desarrollo, en la **fase 4 de 9**. Ya están:
+En desarrollo, en la **fase 5 de 9**. Ya están:
 
 - el esqueleto del repo, las herramientas, la CI y los esquemas de salida (fase 1);
 - los validadores y la normalización (fase 2): CURP y RFC con dígito verificador, nombres entre documentos, domicilio contra el catálogo de SEPOMEX y antigüedad del comprobante. Las reglas, sus fuentes y lo que no se pudo verificar están en [docs/validaciones.md](docs/validaciones.md);
 - el generador de datos sintéticos (fase 3): personas ficticias con sus 4 documentos, en PDF digital, escaneo y foto de celular, con su ground truth. Hay un diseño de comprobante reservado para test. Detalles en [synth/README.md](synth/README.md);
-- la ruta de texto (fase 4): router (texto vs. imagen), clasificador de texto y parsers de CURP y CSF sobre la capa de texto del PDF, sin ML. Los parsers trabajan sobre palabras con posición, así que en la fase 5 servirán también para el texto del OCR. Incluye `make eval` y `eval_private.py` para medir con documentos reales sin exponer sus datos (ver [eval/README.md](eval/README.md)).
+- la ruta de texto (fase 4): router (texto vs. imagen), clasificador de palabras clave y parsers sobre la capa de texto del PDF, sin ML. Incluye `make eval` y `eval_private.py` para medir con documentos reales sin exponer sus datos (ver [eval/README.md](eval/README.md));
+- el extractor A y el primer modelo entrenado (fase 5):
+  - **OCR + reglas:** Tesseract en español con preprocesamiento en OpenCV (contorno de la hoja, perspectiva, inclinación e iluminación). Lo leído pasa por los mismos parsers que la capa de texto, ahora también para INE y comprobante;
+  - **CURP y RFC corregidos** por su estructura y su dígito verificador, y el **código postal** con SEPOMEX y el municipio impreso;
+  - **clasificador de documentos** TF-IDF + regresión logística, comparado con el de palabras clave en [reports/clasificador.md](reports/clasificador.md).
 
 ![Documentos sintéticos de muestra](docs/img/muestras-sinteticas.jpg)
 
 ## Resultados
 
-Generados por `make eval` sobre el split test del dataset sintético (75 personas, 300 documentos). El detalle está en [reports/resultados.md](reports/resultados.md).
+Generados por `make eval` y `make train-clasificador` sobre el split test del dataset sintético (75 personas, 300 documentos). El detalle está en [reports/resultados.md](reports/resultados.md) y [reports/clasificador.md](reports/clasificador.md).
 
-| Componente | Documentos | Resultado |
-|---|---:|---|
-| Router (texto vs. imagen) | 300 | 100.0% |
-| Clasificador de texto | 131 | 89.3% (CURP, CSF e INE: 100%; comprobante: 48.1%) |
-| Clasificador, diseño de comprobante no visto en train | 14 | 0.0% |
-| Parser de texto, CURP digital | 48 | 100% de documentos con todos los campos correctos; p50 253 ms |
-| Parser de texto, CSF digital | 53 | 100% de documentos con todos los campos correctos; p50 284 ms |
+**Documentos con todos los campos correctos** (entre paréntesis, cuántos hay en test):
+
+| Documento | Digital (capa de texto) | Escaneo (OCR) | Foto de celular (OCR) |
+|---|---:|---:|---:|
+| CURP | 100.0% (48) | 86.4% (22) | 60.0% (5) |
+| CSF | 100.0% (53) | 77.8% (18) | 25.0% (4) |
+| INE | 100.0% (3) | 81.5% (27) | 26.7% (45) |
+| Comprobante de domicilio | 100.0% (27) | 60.0% (15) | 33.3% (33) |
+| Comprobante, diseño no visto en train | 100.0% (14) | 57.1% (7) | 15.4% (13) |
+
+Latencia p50: de 32 a 364 ms por la capa de texto; de 2.4 a 6.8 s por OCR. Costo: $0.
+
+**Clasificador de documentos** (exactitud; "no reconocido" cuenta como error):
+
+| Texto | Documentos | Palabras clave | TF-IDF + regresión logística |
+|---|---:|---:|---:|
+| Todos | 300 | 84.0% | 98.3% |
+| Capa de texto del PDF | 131 | 89.3% | 100.0% |
+| OCR de escaneos y fotos | 169 | 79.9% | 97.0% |
+| Comprobante de diseño no visto en train | 34 | 0.0% | 94.1% |
+
+El router (texto vs. imagen) acierta en los 300.
 
 Cómo leer estos números:
 
-- **El 100% de los parsers no dice nada de los documentos reales.** Leen la capa de texto que el mismo generador escribió. Lo que sí se mide así es que las reglas no se rompen con nombres compuestos, partículas, Ñ, sin segundo apellido ni números interiores. El dato que importa saldrá de `make eval-private` con documentos reales.
-- **En la CURP solo se miden curp, nombre y apellidos**, porque son los únicos campos que la constancia imprime. Como en la real, el nombre va completo en un renglón y el parser lo divide con las letras de la CURP: en los 432 CURP digitales de los tres splits la división fue correcta, y en 35 (8%) quedó marcada como ambigua (confianza 0.70) para revisión. Sexo, fecha y entidad de nacimiento y nacionalidad se deducen de la CURP.
-- **El clasificador no generaliza al diseño de comprobante no visto.** No reconoce ninguno de los 14 recibos de teléfono, porque su vocabulario ("Resumen de cargos", "Fecha de expedición") no está en las palabras clave. No se ajustaron mirando test. En la FEA el tipo lo da el campo donde se sube el documento, así que el efecto es una advertencia `DOCUMENTO_NO_RECONOCIDO` que pide revisión, no un error de extracción.
+- **El 100% de los digitales no dice nada de los documentos reales.** Leen la capa de texto que el mismo generador escribió. Lo que sí se mide así es que las reglas no se rompen con nombres compuestos, partículas, Ñ, sin segundo apellido ni números interiores. El dato que importa sale de `make eval-private` con documentos reales: en la última corrida, con una CURP y una CSF reales, todos los campos salieron encontrados y coherentes.
+- **El extractor A es la línea base de la ruta de imagen.** Con escaneos funciona; con fotos se queda corto. Desenfoque, compresión y luz desigual borran las etiquetas chicas y confunden dígitos. Es lo que deben mejorar los extractores de las fases 6 y 7. Hay pocas fotos de CURP y CSF en test (5 y 4), así que esos porcentajes son poco precisos.
+- **La latencia del OCR se midió con 4 procesos en paralelo** en una PC de 12 hilos. La CURP es la más lenta por su texto legal.
+- **Generalización a un diseño no visto.** El parser genérico de comprobante lee los 14 recibos digitales de teléfono sin una regla escrita para ellos. El clasificador de palabras clave no reconoce ninguno, porque su vocabulario no está en las palabras clave; el entrenado reconoce 32 de 34.
+- **El clasificador se entrenó sin las marcas de lo sintético.** Antes de entrenar se descarta todo renglón con "MUESTRA", "ficticio", "sintético" y similares. Con solo quitar esas palabras, el pie común de los comprobantes ("Empresa y documento...") le daba una pista que no existe en documentos reales, y el diseño no visto subía a 97.1%.
+- **En la CURP solo se miden curp, nombre y apellidos**, porque son los únicos campos que la constancia imprime. Sexo, fecha y entidad de nacimiento y nacionalidad se deducen de la CURP.
 
 ## Cómo va a funcionar
 
@@ -67,12 +89,15 @@ Cada campo del formulario (`curp`, `rfc`, `nombre`, `apellido_paterno`, `apellid
 
 ## Desarrollo
 
-Requisitos: [uv](https://docs.astral.sh/uv/), git y make (en Windows: `winget install ezwinports.make`).
+Requisitos: [uv](https://docs.astral.sh/uv/), git, make y Tesseract 5 para el OCR (en Windows: `winget install ezwinports.make UB-Mannheim.TesseractOCR`; en Ubuntu: `apt install tesseract-ocr`).
 
 ```bash
 make install   # dependencias fijadas en uv.lock y hooks de pre-commit
 make sepomex   # catálogo de códigos postales (no se versiona; ver docs/validaciones.md)
+make tessdata  # modelos de Tesseract en español, fijados por SHA-256, en models/tessdata/
 make synth     # dataset sintético en data/synthetic/ (no se versiona)
+make eval      # evaluación en test (OCR en paralelo, con caché en data/cache/ocr/)
+make train-clasificador   # entrena el clasificador y escribe reports/clasificador.md
 make test      # pruebas
 make lint      # ruff
 make help      # todos los objetivos

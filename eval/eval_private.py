@@ -1,9 +1,11 @@
-"""Evalúa la ruta de texto con documentos REALES sin exponer sus datos.
+"""Evalúa la extracción con documentos REALES sin exponer sus datos.
 
 Estructura (todo dentro de ``data/real/``, que git ignora y el hook bloquea)::
 
     data/real/curp/*.pdf        constancias de CURP descargadas de RENAPO
     data/real/csf/*.pdf         constancias de situación fiscal descargadas del SAT
+    data/real/ine/*.pdf         opcional: credenciales escaneadas o fotografiadas
+    data/real/comprobante/*.pdf opcional: comprobantes de domicilio
     data/real/etiquetas.json    opcional: valores correctos, escritos a mano
 
 ``etiquetas.json``: ``{"curp/archivo.pdf": {"curp": "...", "nombre": "...", ...}, ...}``,
@@ -11,12 +13,14 @@ con los nombres de campo del formulario.
 
 **Solo imprime conteos agregados.** Nunca imprime ni escribe valores extraídos, nombres de
 archivo ni mensajes de error (pueden contener datos del documento): de un error solo cuenta
-su tipo. No escribe nada a disco.
+su tipo. No escribe nada a disco: los PDFs sin capa de texto (escaneos y fotos) se leen con
+el extractor A (OCR) **sin caché**, si Tesseract está instalado.
 
 Sin etiquetas mide lo que se puede comprobar sin conocer la respuesta: si se encontró cada
 campo, si los identificadores pasan su dígito verificador y si los datos del documento son
 coherentes entre sí (nombre y fecha contra la CURP, RFC contra CURP, domicilio contra
-SEPOMEX).
+SEPOMEX). Si existe el clasificador entrenado (``make train-clasificador``), también cuenta
+cuántos documentos clasifica bien.
 """
 
 import argparse
@@ -27,8 +31,11 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from docextract.classify_ml import MlClassifier
 from docextract.evaluation import field_matches
+from docextract.extractors.ocr_rules import OcrRulesExtractor
 from docextract.normalize import comparison_key, parse_date
+from docextract.ocr import TesseractNotFoundError, find_tesseract, tessdata_dir
 from docextract.parsers import PARSERS, extract_text_route
 from docextract.router import RouteKind
 from docextract.schemas import DocType, ExtractedField
@@ -44,7 +51,12 @@ from docextract.validators import (
 from docextract.validators.sepomex import SepomexCatalog
 
 ROOT = Path(__file__).resolve().parents[1]
-CARPETAS = {"curp": DocType.CURP, "csf": DocType.CSF}
+CARPETAS = {
+    "curp": DocType.CURP,
+    "csf": DocType.CSF,
+    "ine": DocType.INE,
+    "comprobante": DocType.COMPROBANTE_DOMICILIO,
+}
 
 
 @dataclass
@@ -82,36 +94,34 @@ def _sin_etiquetas(
     c: Conteo,
     catalog: SepomexCatalog | None,
 ) -> None:
-    curp = _valor(campos, "curp")
-    curp_ok = validate_curp(curp)
-    c.add("CURP con dígito verificador válido", curp_ok.valid)
-    nombre, paterno, materno = (
-        _valor(campos, k) for k in ("nombre", "apellido_paterno", "apellido_materno")
-    )
-    if curp_ok.info is not None and nombre and paterno:
-        coinciden = not check_curp_consistency(
-            curp_ok.info, nombre=nombre, apellido_paterno=paterno, apellido_materno=materno
+    if "curp" in campos:
+        curp_ok = validate_curp(_valor(campos, "curp"))
+        c.add("CURP con dígito verificador válido", curp_ok.valid)
+        nombre, paterno, materno = (
+            _valor(campos, k) for k in ("nombre", "apellido_paterno", "apellido_materno")
         )
-        c.add("Nombre coherente con la CURP", coinciden)
-
-    if doc_type is DocType.CURP:
-        fecha = parse_date(_valor(campos, "fecha_nacimiento"))
-        if curp_ok.info is not None:
+        if curp_ok.info is not None and nombre and paterno:
+            coinciden = not check_curp_consistency(
+                curp_ok.info, nombre=nombre, apellido_paterno=paterno, apellido_materno=materno
+            )
+            c.add("Nombre coherente con la CURP", coinciden)
+        if curp_ok.info is not None and "fecha_nacimiento" in campos:
+            fecha = parse_date(_valor(campos, "fecha_nacimiento"))
             c.add(
                 "Fecha de nacimiento coherente con la CURP", fecha == curp_ok.info.fecha_nacimiento
             )
-        return
 
-    rfc = _valor(campos, "rfc")
-    c.add("RFC con dígito verificador válido", validate_rfc(rfc).valid)
-    if rfc and curp:
-        c.add("RFC coherente con la CURP", not check_rfc_against_curp(rfc, curp))
-    if catalog is not None:
+    if doc_type is DocType.CSF:
+        rfc, curp = _valor(campos, "rfc"), _valor(campos, "curp")
+        c.add("RFC con dígito verificador válido", validate_rfc(rfc).valid)
+        if rfc and curp:
+            c.add("RFC coherente con la CURP", not check_rfc_against_curp(rfc, curp))
+    if catalog is not None and "codigo_postal" in campos:
         domicilio = validate_address(
             catalog,
             codigo_postal=_valor(campos, "codigo_postal"),
             estado=_valor(campos, "estado"),
-            ciudad=_valor(campos, "municipio"),
+            ciudad=_valor(campos, "municipio") or _valor(campos, "ciudad"),
             colonia=_valor(campos, "colonia"),
         )
         codigos = {w.code.value for w in domicilio.warnings}
@@ -122,7 +132,13 @@ def _sin_etiquetas(
             c.add("Colonia encontrada en el CP", "COLONIA_NO_ENCONTRADA" not in codigos)
 
 
-def evaluar(directorio: Path, *, catalog: SepomexCatalog | None = None) -> Reporte:
+def evaluar(
+    directorio: Path,
+    *,
+    catalog: SepomexCatalog | None = None,
+    ocr: OcrRulesExtractor | None = None,
+    modelo: MlClassifier | None = None,
+) -> Reporte:
     reporte = Reporte()
     etiquetas_path = directorio / "etiquetas.json"
     etiquetas: dict[str, dict[str, str]] = {}
@@ -139,18 +155,30 @@ def evaluar(directorio: Path, *, catalog: SepomexCatalog | None = None) -> Repor
         for path in sorted((directorio / carpeta).glob("*.pdf")):
             reporte.documentos[doc_type.value] += 1
             try:
-                salida = extract_text_route(path.read_bytes(), doc_type)
+                pdf = path.read_bytes()
+                salida = extract_text_route(pdf, doc_type)
+                classification, result = salida.classification, salida.result
+                texto = salida.route.layout.text if salida.route.kind is RouteKind.TEXT else None
+                if salida.route.kind is RouteKind.IMAGE and ocr is not None:
+                    imagen = ocr.extract_pdf(pdf, doc_type)
+                    classification, result = imagen.classification, imagen.result
+                    texto = imagen.ocr.layout.text
             except Exception as error:  # solo se cuenta el tipo
                 reporte.errores[type(error).__name__] += 1
                 continue
             c.add("Va por la ruta de texto", salida.route.kind is RouteKind.TEXT)
-            if salida.classification is not None:
+            if salida.route.kind is RouteKind.IMAGE:
+                c.add("Leído por OCR", ocr is not None)
+            if classification is not None:
+                c.add("Clasificado como el tipo correcto", classification.doc_type == doc_type)
+            if modelo is not None and texto is not None:
                 c.add(
-                    "Clasificado como el tipo correcto", salida.classification.doc_type == doc_type
+                    "Clasificado como el tipo correcto (modelo entrenado)",
+                    modelo.classify_text(texto).doc_type == doc_type,
                 )
-            if salida.result is None:
+            if result is None:
                 continue
-            campos = salida.result.fields
+            campos = result.fields
             extraidos[doc_type].append(campos)
             for nombre in PARSERS[doc_type].fields:
                 c.add(f"Encontrado: {nombre}", _valor(campos, nombre) is not None)
@@ -198,7 +226,7 @@ def imprimir(reporte: Reporte) -> None:
     print()
     total = sum(reporte.documentos.values())
     if not total:
-        print("No se encontraron PDFs en data/real/curp/ ni en data/real/csf/.")
+        print("No se encontraron PDFs en data/real/ (carpetas curp, csf, ine y comprobante).")
     for doc_type, conteo in reporte.por_tipo.items():
         if not reporte.documentos[doc_type]:
             continue
@@ -219,6 +247,23 @@ def imprimir(reporte: Reporte) -> None:
             print(f"  {n:3d}  {tipo}")
 
 
+def _ocr_disponible() -> OcrRulesExtractor | None:
+    extractor = OcrRulesExtractor()  # sin caché: nada del documento va a disco
+    try:
+        find_tesseract()
+        tessdata_dir(extractor.config)
+    except TesseractNotFoundError:
+        return None
+    return extractor
+
+
+def _clasificador_entrenado() -> MlClassifier | None:
+    try:
+        return MlClassifier.load()
+    except (OSError, ValueError, KeyError):
+        return None
+
+
 def main(argv: list[str] | None = None) -> int:
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
@@ -233,7 +278,13 @@ def main(argv: list[str] | None = None) -> int:
     except FileNotFoundError:
         catalog = None
         print("(Sin catálogo de SEPOMEX: no se valida el domicilio. Usa `make sepomex`.)\n")
-    imprimir(evaluar(args.dir, catalog=catalog))
+    ocr = _ocr_disponible()
+    if ocr is None:
+        print("(Sin Tesseract o sin `make tessdata`: los PDFs de imagen no se leen.)\n")
+    modelo = _clasificador_entrenado()
+    if modelo is None:
+        print("(Sin clasificador entrenado: `make train-clasificador` para medirlo.)\n")
+    imprimir(evaluar(args.dir, catalog=catalog, ocr=ocr, modelo=modelo))
     return 0
 
 

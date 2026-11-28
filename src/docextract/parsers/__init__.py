@@ -1,18 +1,18 @@
 """Ruta 2a: documentos con capa de texto, leídos con reglas y sin ML.
 
-Los parsers trabajan sobre un ``TextLayout`` (palabras con posición). En esta fase viene de
-la capa de texto del PDF; en la fase 5, del OCR, con los mismos parsers.
-
-Hay parser para CURP y CSF, que casi siempre llegan como PDF digital. INE y comprobante
-van por la ruta de imagen (fase 5) aunque tengan capa de texto.
+Los parsers trabajan sobre un ``TextLayout`` (palabras con posición), que viene de la capa
+de texto del PDF o del OCR (extractor A, :mod:`docextract.extractors.ocr_rules`): los mismos
+parsers sirven para las dos rutas.
 """
 
 from dataclasses import dataclass
 
 from docextract.classify import Classification, classify_text, verify_doc_type
 from docextract.parsers.base import EXTRACTOR_NAME, TextParser
+from docextract.parsers.comprobante import ComprobanteParser
 from docextract.parsers.csf import CsfParser
 from docextract.parsers.curp import CurpParser
+from docextract.parsers.ine import IneParser
 from docextract.router import Route, RouteKind, route
 from docextract.schemas import DocType, ExtractionResult
 
@@ -21,6 +21,8 @@ __all__ = ["EXTRACTOR_NAME", "PARSERS", "TextRouteResult", "extract_text_route"]
 PARSERS: dict[DocType, TextParser] = {
     DocType.CURP: CurpParser(),
     DocType.CSF: CsfParser(),
+    DocType.INE: IneParser(),
+    DocType.COMPROBANTE_DOMICILIO: ComprobanteParser(),
 }
 
 

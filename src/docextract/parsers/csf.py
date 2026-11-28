@@ -10,6 +10,7 @@ import time
 from docextract.entidades import find_entidad
 from docextract.layout import TextLayout
 from docextract.normalize import normalize_codigo_postal
+from docextract.parsers.address import default_catalog, repair_cp
 from docextract.parsers.base import EXTRACTOR_NAME, Confianza, field, find_curp, find_rfc
 from docextract.schemas import DocType, ExtractedField, ExtractionResult
 from docextract.validators.curp import check_curp_consistency
@@ -80,9 +81,9 @@ class CsfParser:
             return layout.value(ETIQUETAS[name], VOCABULARIO)
 
         # Identificadores
-        rfc, rfc_confidence = find_rfc(layout.text, prefer=get("rfc"))
+        rfc, rfc_confidence = find_rfc(layout.text, prefer=get("rfc"), ocr=layout.ocr)
         curp_etiquetada = get("curp") or ""
-        curp, info, curp_confidence = find_curp(f"{curp_etiquetada}\n{layout.text}")
+        curp, info, curp_confidence = find_curp(f"{curp_etiquetada}\n{layout.text}", ocr=layout.ocr)
         rfc_warnings = []
         if rfc and curp:
             rfc_warnings = check_rfc_against_curp(rfc, curp, docs=(DocType.CSF,))
@@ -106,9 +107,16 @@ class CsfParser:
 
         # Domicilio fiscal
         cp = get("codigo_postal")
-        cp_ok = normalize_codigo_postal(cp) is not None
-        out["codigo_postal"] = field(cp, Confianza.ETIQUETADO if cp_ok else Confianza.INVALIDO)
         valores = {name: get(name) for name in DOMICILIO_FIELDS}
+        cp_ok = normalize_codigo_postal(cp) is not None
+        confidence = Confianza.ETIQUETADO if cp_ok else Confianza.INVALIDO
+        if layout.ocr:
+            corregido = repair_cp(
+                cp, default_catalog(), municipio=valores["municipio"], estado=get("estado")
+            )
+            if corregido != cp:
+                cp, confidence = corregido, Confianza.REPARADO
+        out["codigo_postal"] = field(cp, confidence)
         for name in ("numero_exterior", "numero_interior", "colonia", "ciudad", "municipio"):
             out[name] = field(valores[name], Confianza.ETIQUETADO)
         tipo, nombre_vialidad = valores["tipo_vialidad"], valores["nombre_vialidad"]

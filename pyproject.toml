@@ -8,9 +8,14 @@ license-files = ["LICENSE"]
 authors = [{ name = "LeonelNV" }]
 requires-python = ">=3.11"
 dependencies = [
+    "numpy>=2.0,<3",
+    "opencv-python-headless>=4.10,<5",  # preprocesamiento de fotos (perspectiva, sombras)
     "pdfplumber>=0.11,<0.12",
+    "pillow>=10.4,<12",
     "pydantic>=2.9,<3",
+    "pypdfium2>=4.30,<6",  # rasterizar PDFs de imagen para el OCR
     "rapidfuzz>=3.9,<4",
+    "scikit-learn>=1.5,<2",  # clasificador de documentos
 ]
 
 [dependency-groups]
@@ -22,9 +27,6 @@ dev = [
 ]
 synth = [
     "faker>=30,<40",
-    "numpy>=2.0,<3",
-    "pillow>=10.4,<12",
-    "pypdfium2>=4.30,<6",
     "reportlab>=4.2,<5",
 ]
 

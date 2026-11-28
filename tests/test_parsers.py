@@ -1,4 +1,4 @@
-"""Pruebas del router, el clasificador de texto y los parsers de CURP y CSF.
+"""Pruebas del router, el clasificador de texto y los parsers de CURP, CSF, INE y comprobante.
 
 Las CURPs y RFCs las genera el código a partir de nombres inventados. Los formatos
 "alternativos" (nombre en una línea, apellidos primero, etiquetas sin dos puntos) simulan
@@ -14,8 +14,10 @@ from faker import Faker
 
 from docextract.classify import classify_text, verify_doc_type
 from docextract.evaluation import field_matches
+from docextract.layout import TextLayout
 from docextract.parsers import PARSERS, extract_text_route
 from docextract.parsers.base import Confianza, split_full_name
+from docextract.parsers.comprobante import ComprobanteParser
 from docextract.parsers.csf import CsfParser
 from docextract.parsers.curp import CurpParser
 from docextract.router import InvalidPdfError, RouteKind, route
@@ -25,7 +27,7 @@ from docextract.validators.rfc import build_rfc
 from docextract.validators.sepomex import SepomexCatalog
 from synth.config import SynthConfig
 from synth.persona import generate_persona
-from synth.render import csf, curp
+from synth.render import comprobante, csf, curp, ine
 from synth.render.common import DocContext
 from test_layout import layout
 
@@ -104,9 +106,14 @@ def test_documento_en_el_campo_equivocado() -> None:
     assert WarningCode.DOCUMENTO_NO_RECONOCIDO in [w.code for w in out.result.warnings]
 
 
-def test_sin_parser_o_por_imagen_no_hay_resultado() -> None:
-    assert extract_text_route((DIGITAL / "ine.pdf").read_bytes(), DocType.INE).result is None
+def test_por_imagen_no_hay_resultado_de_la_ruta_de_texto() -> None:
     assert extract_text_route((FOTO / "curp.pdf").read_bytes(), DocType.CURP).result is None
+
+
+def test_ine_digital_por_la_ruta_de_texto() -> None:
+    result = extract_text_route((DIGITAL / "ine.pdf").read_bytes(), DocType.INE).result
+    assert result is not None
+    assert result.fields["curp"].value
 
 
 # ---------------------------------------------------------------------------
@@ -124,22 +131,35 @@ def _documentos(catalogo: SepomexCatalog, n: int):
         )  # fmt: skip
         yield DocType.CURP, curp.render(ctx)
         yield DocType.CSF, csf.render(ctx)
+        yield DocType.INE, ine.render(ctx)
+        # Solo los diseños de train: el de teléfono mide la generalización en test.
+        yield (
+            DocType.COMPROBANTE_DOMICILIO,
+            comprobante.render(ctx, ("luz", "agua", "banco")[seed % 3]),
+        )
 
 
 def test_parsers_leen_todos_los_campos_de_las_plantillas(catalogo: SepomexCatalog) -> None:
+    parsers = {**PARSERS, DocType.COMPROBANTE_DOMICILIO: ComprobanteParser(catalogo)}
     for doc_type, rendered in _documentos(catalogo, 25):
-        out = extract_text_route(rendered.pdf, doc_type)
-        assert out.result is not None
-        assert out.result.warnings == ()
-        for name in PARSERS[doc_type].fields:
+        result = parsers[doc_type].parse(TextLayout.from_pdf(rendered.pdf))
+        for name in parsers[doc_type].fields:
             if name in rendered.fields:
-                value = out.result.fields[name].value
+                value = result.fields[name].value
                 assert field_matches(name, value, rendered.fields[name]), (doc_type, name, value)
 
 
-def test_solo_curp_y_csf_tienen_parser_de_texto() -> None:
-    # INE y comprobante van por la ruta de imagen en esta fase, aunque tengan texto.
-    assert set(PARSERS) == {DocType.CURP, DocType.CSF}
+def test_ruta_de_texto_sin_advertencias(catalogo: SepomexCatalog) -> None:
+    for doc_type, rendered in _documentos(catalogo, 5):
+        if doc_type in (DocType.CURP, DocType.CSF):
+            out = extract_text_route(rendered.pdf, doc_type)
+            assert out.result is not None
+            assert out.result.warnings == ()
+
+
+def test_hay_parser_para_los_cuatro_documentos() -> None:
+    # Los mismos parsers leen la capa de texto y el OCR.
+    assert set(PARSERS) == set(DocType)
 
 
 # ---------------------------------------------------------------------------

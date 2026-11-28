@@ -1,0 +1,9 @@
+clasificador,subconjunto,documentos,exactitud,macro_f1,no_reconocidos
+palabras_clave,todos,300,0.84,0.8861,48
+palabras_clave,texto,131,0.8931,0.9125,14
+palabras_clave,ocr,169,0.7988,0.8685,34
+palabras_clave,plantilla_no_vista,34,0.0,0.0,34
+ml,todos,300,0.9833,0.9915,5
+ml,texto,131,1.0,1.0,0
+ml,ocr,169,0.9704,0.9844,5
+ml,plantilla_no_vista,34,0.9412,0.2424,2
