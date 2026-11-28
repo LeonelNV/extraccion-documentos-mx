@@ -33,7 +33,7 @@ __all__ = [
     "validar",
 ]
 
-PROMPT_VERSION = "2"
+PROMPT_VERSION = "3"
 """Cambia si cambian las instrucciones o los esquemas (invalida la caché)."""
 
 NOMBRES_DOCUMENTO = {
@@ -61,7 +61,7 @@ errores evidentes de letras y números (O/0, I/1, S/5) en claves como la CURP o 
 DESCRIPCIONES: dict[str, str] = {
     "curp": "CURP: 18 caracteres alfanuméricos, sin espacios.",
     "rfc": "RFC de persona física con homoclave: 13 caracteres, sin espacios.",
-    "nombre": "Nombre o nombres de pila, sin apellidos.",
+    "nombre": "Solo el nombre o nombres de pila, SIN apellidos.",
     "apellido_paterno": "Primer apellido.",
     "apellido_materno": 'Segundo apellido; "" si la persona no tiene.',
     "fecha_nacimiento": "Fecha de nacimiento tal como aparece impresa (p. ej. DD/MM/AAAA).",
@@ -95,14 +95,16 @@ DESCRIPCIONES_POR_DOCUMENTO: dict[DocType, dict[str, str]] = {
     },
     DocType.CURP: {
         "nombre": (
-            "Nombre o nombres de pila. La constancia imprime el nombre completo en una línea, "
-            "en este orden: nombre(s), primer apellido, segundo apellido."
+            "Solo el nombre o nombres de pila, SIN apellidos. La constancia imprime el nombre "
+            "completo en una línea (nombre(s), primer apellido, segundo apellido): aquí va "
+            "solo la primera parte."
         ),
     },
     DocType.INE: {
         "nombre": (
-            "Nombre o nombres de pila. Bajo NOMBRE, la credencial imprime en renglones "
-            "separados y en este orden: primer apellido, segundo apellido y nombre(s)."
+            "Solo el nombre o nombres de pila, SIN apellidos. Bajo NOMBRE, la credencial "
+            "imprime en renglones separados: primer apellido, segundo apellido y nombre(s); "
+            "aquí va solo el último renglón."
         ),
         "apellido_paterno": "Primer apellido: el primer renglón bajo NOMBRE.",
         "apellido_materno": 'Segundo apellido: el segundo renglón bajo NOMBRE; "" si no hay.',
