@@ -2,10 +2,12 @@
 
 import re
 from collections.abc import Iterable
+from datetime import date
 from typing import Protocol
 
 from docextract.layout import TextLayout
 from docextract.normalize import clean_identifier, clean_text
+from docextract.repair import CURP_PATTERN, RFC_PATTERN, candidate_strings, repair
 from docextract.schemas import DocType, ExtractedField, ExtractionResult, ExtractionWarning
 from docextract.validators.curp import CurpInfo, curp_name_letters, validate_curp
 from docextract.validators.rfc import RFC_PF_RE, validate_rfc
@@ -30,6 +32,9 @@ class Confianza:
     """Identificador con dígito verificador válido, o dato que coincide con la CURP."""
     ETIQUETADO = 0.95
     """Encontrado junto a su etiqueta, sin forma de validarlo."""
+    REPARADO = 0.92
+    """Identificador leído por OCR con errores típicos corregidos por su estructura y
+    validado con su dígito verificador (ver :mod:`docextract.repair`)."""
     DERIVADO = 0.90
     """No está impreso: se dedujo de la CURP."""
     DUDOSO = 0.70
@@ -65,23 +70,63 @@ def _candidates(text: str, length: int) -> list[str]:
     return [t for t in tokens if len(t) == length]
 
 
-def find_curp(text: str) -> tuple[str | None, CurpInfo | None, float]:
-    """La CURP del documento: primero una con dígito válido; si no, una con formato válido."""
+def _repaired(
+    text: str, length: int, pattern: str, is_valid, *, max_extra: int = 6
+) -> tuple[str | None, float]:
+    """La variante válida con menos cambios; ``DUDOSO`` si dos distintas empatan."""
+    best: dict[str, int] = {}
+    for candidate, cost in candidate_strings(text.splitlines(), length, max_extra=max_extra):
+        for variant, changes in repair(candidate, pattern):
+            if is_valid(variant):
+                best[variant] = min(best.get(variant, 99), cost + changes)
+                break  # las siguientes variantes de este candidato tienen más cambios
+    if not best:
+        return None, 0.0
+    minimum = min(best.values())
+    winners = [v for v, n in best.items() if n == minimum]
+    return winners[0], Confianza.REPARADO if len(winners) == 1 else Confianza.DUDOSO
+
+
+def _curp_valida(value: str, today: date | None = None) -> bool:
+    """Dígito verificador correcto y fecha de nacimiento no futura.
+
+    La fecha importa: el dígito verificador no distingue ``O`` de ``0`` en el diferenciador
+    (sus valores difieren en 25, por el peso 2, = 50 ≡ 0 mód 10). Con ``O`` la CURP sería de
+    alguien nacido en 20xx, y un año 2099 delata la lectura equivocada.
+    """
+    result = validate_curp(value)
+    if not result.valid or result.info is None:
+        return False
+    return result.info.fecha_nacimiento <= (today or date.today())
+
+
+def find_curp(text: str, *, ocr: bool = False) -> tuple[str | None, CurpInfo | None, float]:
+    """La CURP del documento: primero una con dígito válido; si no, una con formato válido.
+
+    Con ``ocr=True``, antes de conformarse con una de formato válido se intenta corregir
+    los errores típicos del OCR (ver :mod:`docextract.repair`).
+    """
     con_formato: tuple[str, CurpInfo] | None = None
     for candidate in _candidates(text, 18):
         result = validate_curp(candidate)
-        if result.valid:
+        if result.valid and _curp_valida(candidate):
             return result.curp, result.info, Confianza.VALIDADO
         if result.info is not None and con_formato is None:
             con_formato = (result.curp, result.info)
+    if ocr:
+        curp, confidence = _repaired(text, 18, CURP_PATTERN, _curp_valida)
+        if curp:
+            return curp, validate_curp(curp).info, confidence
     if con_formato:
         return con_formato[0], con_formato[1], Confianza.INVALIDO
     return None, None, 0.0
 
 
-def find_rfc(text: str, *, prefer: str | None = None) -> tuple[str | None, float]:
+def find_rfc(
+    text: str, *, prefer: str | None = None, ocr: bool = False
+) -> tuple[str | None, float]:
     """El RFC de persona física: el que sigue a ``prefer`` (texto de la etiqueta) o el
-    primero válido."""
+    primero válido. Con ``ocr=True`` intenta corregir errores del OCR."""
     candidates = []
     if prefer:
         candidates.append(clean_identifier(prefer))
@@ -95,7 +140,19 @@ def find_rfc(text: str, *, prefer: str | None = None) -> tuple[str | None, float
             return result.rfc, Confianza.VALIDADO
         if fallback is None and result.formato_valido and not result.generico:
             fallback = result.rfc
+    if ocr:
+        # Sin ventanas largas: los primeros 13 caracteres de la CURP parecen un RFC.
+        rfc, confidence = _repaired(text, 13, RFC_PATTERN, _rfc_valido, max_extra=4)
+        if rfc:
+            return rfc, confidence
     return (fallback, Confianza.INVALIDO) if fallback else (None, 0.0)
+
+
+def _rfc_valido(value: str) -> bool:
+    if not RFC_PF_RE.match(value):
+        return False
+    result = validate_rfc(value)
+    return result.valid and not result.generico
 
 
 # ---------------------------------------------------------------------------

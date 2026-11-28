@@ -17,6 +17,8 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from functools import cached_property
 
+from rapidfuzz.distance import Hamming
+
 from docextract.normalize import comparison_key
 
 __all__ = ["WORD_OPTIONS", "Line", "Segment", "TextLayout", "Word", "split_glued"]
@@ -109,11 +111,30 @@ def split_glued(word: Word) -> list[Word]:
     return pieces
 
 
+def _same_token(found: str, label: str, *, fuzzy: bool) -> bool:
+    """Una palabra de etiqueta; con ``fuzzy`` (OCR) tolera **una letra cambiada** si la
+    palabra tiene 5 o más ("NOWBRE" por "NOMBRE"). No tolera letras de más o de menos:
+    "NOMBRE" no debe coincidir con la etiqueta "NOMBRES"."""
+    if found == label:
+        return True
+    return (
+        fuzzy
+        and len(label) >= 5
+        and len(found) == len(label)
+        and Hamming.distance(found, label) == 1
+    )
+
+
 class TextLayout:
-    def __init__(self, words: Iterable[Word], *, width: float = 0, height: float = 0) -> None:
+    def __init__(
+        self, words: Iterable[Word], *, width: float = 0, height: float = 0, ocr: bool = False
+    ) -> None:
         self.words = tuple(piece for w in words if w.text.strip() for piece in split_glued(w))
         self.width = width
         self.height = height
+        self.ocr = ocr
+        """El texto viene del OCR: las etiquetas toleran errores y los parsers intentan
+        corregir CURP y RFC (ver :mod:`docextract.repair`)."""
 
     # ------------------------------------------------------------------
     # Construcción
@@ -193,15 +214,23 @@ class TextLayout:
             position = 0
             while position < len(tokens):
                 match = None
-                if position in starts:
+                # Con OCR, primero coincidencias exactas con todas las etiquetas y solo
+                # después con una letra cambiada.
+                for fuzzy in (False, True) if (self.ocr and position in starts) else (False,):
+                    if match or position not in starts:
+                        break
                     for key, parts in label_tokens:
                         end = position + len(parts)
-                        if end in ends and [t for t, _ in tokens[position:end]] == parts:
+                        if end in ends and all(
+                            _same_token(t, part, fuzzy=fuzzy)
+                            for (t, _), part in zip(tokens[position:end], parts, strict=True)
+                        ):
                             first_word, last_word = tokens[position][1], tokens[end - 1][1]
                             # Una palabra de un valor puede coincidir con una etiqueta (la
                             # colonia "DULCES NOMBRES"). Solo es etiqueta si termina en ":" o
                             # si abre la línea.
-                            if line.words[last_word].text.endswith(":") or first_word == 0:
+                            colon = (":", ";") if self.ocr else (":",)
+                            if line.words[last_word].text.endswith(colon) or first_word == 0:
                                 match = (first_word, last_word, key)
                                 position = end
                                 break

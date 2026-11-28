@@ -76,9 +76,9 @@ class CurpParser:
         start = time.perf_counter()
         out: dict[str, ExtractedField] = {}
 
-        curp, info, curp_confidence = find_curp(layout.text)
+        curp, info, curp_confidence = find_curp(layout.text, ocr=layout.ocr)
         warnings = []
-        if curp and curp_confidence < Confianza.VALIDADO:
+        if curp and curp_confidence <= Confianza.INVALIDO:
             warnings.append(
                 make_warning(
                     WarningCode.CURP_DIGITO_VERIFICADOR_INVALIDO,
