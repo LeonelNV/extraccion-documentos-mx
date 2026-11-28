@@ -68,14 +68,22 @@ _NO_PALABRA = re.compile(r"[^A-Z0-9Ñ ]+")
 
 
 def prepare_text(text: str) -> str:
-    """Texto listo para el modelo.
+    r"""Texto listo para el modelo.
 
-    >>> prepare_text("MUESTRA - Código Postal: 63000, Tepic")
+    Un renglón con una palabra de ``PALABRAS_SINTETICAS`` se descarta **completo**: es un
+    aviso de las plantillas ("Empresa y documento ficticios, generados para pruebas..."), y
+    sus otras palabras ("EMPRESA Y DOCUMENTO") también serían una pista que solo existe en
+    los sintéticos.
+
+    >>> prepare_text("Código Postal: 63000, Tepic\nEmpresa ficticia de agua\nMUESTRA")
     'CODIGO POSTAL 00000 TEPIC'
     """
-    key = _NO_PALABRA.sub(" ", comparison_key(text))
-    key = re.sub(r"\d", "0", key)
-    return " ".join(w for w in key.split() if w not in PALABRAS_SINTETICAS)
+    words: list[str] = []
+    for line in text.splitlines():
+        line_words = re.sub(r"\d", "0", _NO_PALABRA.sub(" ", comparison_key(line))).split()
+        if not any(w in PALABRAS_SINTETICAS for w in line_words):
+            words += line_words
+    return " ".join(words)
 
 
 def build_pipeline(c: float, seed: int = 0):

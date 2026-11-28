@@ -282,6 +282,20 @@ def summarize(evals: list[DocumentEval]) -> dict[str, object]:
                 por_modalidad[modalidad] = _extraction(docs, doc_type)
         if por_modalidad:
             extraccion[doc_type.value] = por_modalidad
+    no_vista: dict[str, dict[str, float]] = {}
+    for modalidad in MODALIDADES:
+        docs = [
+            e
+            for e in evals
+            if not e.truth.template_seen_in_train and e.truth.modality == modalidad and e.parsed
+        ]
+        if docs:
+            campos = [f.match for e in docs for f in e.fields.values()]
+            no_vista[modalidad] = {
+                "documentos": len(docs),
+                "documentos_100": sum(e.all_correct for e in docs) / len(docs),
+                "exactitud_campos": sum(campos) / len(campos),
+            }
     return {
         "documentos": len(evals),
         "router": {
@@ -290,6 +304,8 @@ def summarize(evals: list[DocumentEval]) -> dict[str, object]:
         },
         "clasificador_palabras_clave": clasificador,
         "extraccion": extraccion,
+        # Generalización de la extracción al diseño de comprobante que no está en train.
+        "extraccion_plantilla_no_vista": no_vista,
     }
 
 
@@ -317,6 +333,21 @@ def to_markdown(summary: dict, *, title: str) -> str:
                 f"| {doc_type} | {modalidad} | `{data['extractor']}` | {data['documentos']} | "
                 f"{_pct(data['documentos_100'])} | {data['latencia_p50_ms']:.0f} ms | "
                 f"{data['latencia_p95_ms']:.0f} ms |"
+            )
+    if no_vista := summary.get("extraccion_plantilla_no_vista"):
+        lines += [
+            "",
+            "## Comprobante de diseño no visto en train",
+            "",
+            "Las reglas del comprobante se escribieron sin este diseño: mide la generalización.",
+            "",
+            "| Modalidad | Documentos | 100% correctos | Campos correctos |",
+            "|---|---:|---:|---:|",
+        ]
+        for modalidad, data in no_vista.items():
+            lines.append(
+                f"| {modalidad} | {data['documentos']} | {_pct(data['documentos_100'])} | "
+                f"{_pct(data['exactitud_campos'])} |"
             )
     lines += [
         "",
