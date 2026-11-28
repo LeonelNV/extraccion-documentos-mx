@@ -12,6 +12,7 @@ from docextract.evaluation import field_matches
 from docextract.extractors import Extractor
 from docextract.extractors.ocr_rules import NAME, OcrRulesExtractor
 from docextract.ocr import OcrCache, OcrConfig, OcrResult, OcrWord, TesseractNotFoundError
+from docextract.parsers.address import default_catalog
 from docextract.schemas import DocType
 
 SAMPLES = Path(__file__).resolve().parents[1] / "data" / "synthetic" / "samples"
@@ -112,10 +113,15 @@ def test_extractor_a_sobre_escaneos(doc: str, tmp_path: Path) -> None:
     assert out.classification.doc_type is doc_type
     assert out.result is not None and out.result.extractor == NAME
     assert out.result.latency_ms > 0
+    # Sin el catálogo de SEPOMEX (en CI no se puede redistribuir), el comprobante lee colonia,
+    # ciudad y estado con reglas más débiles: esos campos solo se exigen con catálogo.
+    sin_catalogo = set()
+    if doc_type is DocType.COMPROBANTE_DOMICILIO and default_catalog() is None:
+        sin_catalogo = {"colonia", "ciudad", "estado"}
     correctos = [
         field_matches(name, out.result.fields[name].value, value)
         for name, value in document["fields"].items()
-        if name in out.result.fields
+        if name in out.result.fields and name not in sin_catalogo
     ]
     # Línea base: la mayoría de los campos de un escaneo limpio.
     assert sum(correctos) / len(correctos) >= 0.7, correctos
