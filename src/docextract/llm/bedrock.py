@@ -13,7 +13,9 @@ Decisiones:
 * ``maxTokens`` explícito y temperatura 0: sin ``maxTokens`` Bedrock reserva el máximo del
   modelo contra la cuota.
 * Reintentos adaptativos de botocore para ``ThrottlingException`` y errores 5xx; los
-  errores de validación o de permisos no se reintentan.
+  errores de validación o de permisos no se reintentan y detienen la corrida. Si el modelo
+  genera una llamada a la herramienta mal formada (``ModelErrorException``), se reintenta
+  una vez y después la respuesta cuenta como inválida.
 * **Costo** = tokens que reporta Bedrock x precio de :data:`PRECIOS` (Price List API, con
   fecha y fuente en ``precios_bedrock.json``).
 * **Tope de gasto** (:class:`Presupuesto`): antes de cada llamada se suma el peor caso
@@ -51,6 +53,9 @@ __all__ = [
 
 REGION = "us-east-1"
 HERRAMIENTA = "registrar_campos"
+REINTENTOS_ERROR_DEL_MODELO = 1
+"""``ModelErrorException``: el modelo generó una llamada a la herramienta mal formada (pasa
+con Nova). Se reintenta una vez; si vuelve a fallar, la respuesta cuenta como inválida."""
 
 
 @dataclass(frozen=True)
@@ -252,18 +257,40 @@ class BedrockClient:
         if self.cache is not None and (guardada := self.cache.get(key)) is not None:
             return guardada
 
-        reserva = 0.0
-        if self.presupuesto is not None:
-            reserva = model.costo(estimar_tokens_entrada(content, system, schema), max_tokens)
-            self.presupuesto.reservar(reserva)
-        start = time.perf_counter()
-        try:
-            response = self.client.converse(**request)
-        except BaseException:
+        response = None
+        for intento in range(1 + REINTENTOS_ERROR_DEL_MODELO):
+            reserva = 0.0
             if self.presupuesto is not None:
-                # Una llamada rechazada no se cobra; una que falló a medias, quizá sí.
-                self.presupuesto.liquidar(reserva, 0.0)
-            raise
+                reserva = model.costo(estimar_tokens_entrada(content, system, schema), max_tokens)
+                self.presupuesto.reservar(reserva)
+            start = time.perf_counter()
+            try:
+                response = self.client.converse(**request)
+            except Exception as error:
+                if _codigo(error) != "ModelErrorException":
+                    if self.presupuesto is not None:
+                        # Una llamada rechazada (permisos, validación) no se cobra.
+                        self.presupuesto.liquidar(reserva, 0.0)
+                    raise
+                # El modelo generó una llamada a la herramienta mal formada. Bedrock no
+                # reporta tokens: se cuenta el peor caso, por prudencia.
+                if self.presupuesto is not None:
+                    self.presupuesto.liquidar(reserva, reserva)
+                if intento == REINTENTOS_ERROR_DEL_MODELO:
+                    # No se guarda en la caché: otra corrida lo vuelve a intentar.
+                    return Respuesta(
+                        datos=None,
+                        input_tokens=0,
+                        output_tokens=0,
+                        costo_usd=model.costo(
+                            estimar_tokens_entrada(content, system, schema), max_tokens
+                        ),
+                        latencia_ms=(time.perf_counter() - start) * 1000,
+                        stop_reason="ModelErrorException",
+                    )
+                continue
+            break
+        assert response is not None
         latencia = (time.perf_counter() - start) * 1000
         usage = response.get("usage", {})
         input_tokens = int(usage.get("inputTokens", 0))
@@ -292,6 +319,12 @@ class BedrockClient:
         if self.cache is not None:
             self.cache.put(key, respuesta)
         return respuesta
+
+
+def _codigo(error: Exception) -> str | None:
+    """El código de error de botocore (``ClientError``), si lo es."""
+    response = getattr(error, "response", None)
+    return response.get("Error", {}).get("Code") if isinstance(response, dict) else None
 
 
 def _json_en_texto(texto: str) -> dict[str, Any] | None:

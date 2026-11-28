@@ -4,6 +4,7 @@ de la API de Bedrock."""
 
 import json
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -127,6 +128,57 @@ def test_cliente_no_llama_si_pasaria_el_tope() -> None:
             modelo(NOVA_LITE), system="s", content=[{"text": "x"}], schema={}, max_tokens=700
         )
     assert fake.peticiones == []
+
+
+class _ErrorDelModelo(Exception):
+    response: ClassVar[dict] = {
+        "Error": {"Code": "ModelErrorException", "Message": "invalid sequence"}
+    }
+
+
+class FakeConError(FakeBedrock):
+    def __init__(self, *respuestas, errores: int) -> None:
+        super().__init__(*respuestas)
+        self.errores = errores
+
+    def converse(self, **request):
+        if self.errores:
+            self.errores -= 1
+            self.peticiones.append(request)
+            raise _ErrorDelModelo()
+        return super().converse(**request)
+
+
+def test_error_del_modelo_se_reintenta_y_luego_es_invalido(tmp_path: Path) -> None:
+    m = modelo(NOVA_LITE)
+    kwargs = {"system": "s", "content": [{"text": "x"}], "schema": {}, "max_tokens": 700}
+    fake = FakeConError(_respuesta({"curp": CURP}), errores=1)
+    r = BedrockClient(client=fake).extraer(m, **kwargs)
+    assert r.datos == {"curp": CURP} and len(fake.peticiones) == 2
+
+    fake = FakeConError(errores=2)
+    presupuesto = Presupuesto(10.0)
+    cache = LlmCache(tmp_path)
+    r = BedrockClient(client=fake, presupuesto=presupuesto, cache=cache).extraer(m, **kwargs)
+    assert r.datos is None and r.stop_reason == "ModelErrorException"
+    assert presupuesto.gastado_usd > 0  # peor caso, por prudencia
+    assert not list(tmp_path.rglob("*.json"))  # no se guarda: otra corrida reintenta
+
+
+def test_otros_errores_detienen_la_corrida() -> None:
+    class Denegado(Exception):
+        response: ClassVar[dict] = {"Error": {"Code": "AccessDeniedException"}}
+
+    class Fake:
+        def converse(self, **request):
+            raise Denegado()
+
+    presupuesto = Presupuesto(10.0)
+    with pytest.raises(Denegado):
+        BedrockClient(client=Fake(), presupuesto=presupuesto).extraer(
+            modelo(NOVA_LITE), system="s", content=[{"text": "x"}], schema={}, max_tokens=10
+        )
+    assert presupuesto.gastado_usd == 0
 
 
 def test_respaldo_json_en_texto() -> None:
