@@ -39,13 +39,15 @@ from docextract.normalize import (
 )
 from docextract.parsers import EXTRACTOR_NAME, PARSERS, extract_text_route
 from docextract.router import RouteKind
-from docextract.schemas import DocType
+from docextract.schemas import DocType, ExtractionResult
 
 __all__ = [
     "DocumentEval",
     "cer",
     "evaluate_document",
     "evaluate_documents",
+    "evaluate_image_result",
+    "field_evals",
     "field_matches",
     "load_manifest",
     "normalize_value",
@@ -129,6 +131,10 @@ class DocumentEval:
     latency_ms: float | None = None
     extractor: str | None = None
     """``texto_reglas``, ``ocr_reglas`` o ``None`` si no se leyó el texto."""
+    costo_usd: float = 0.0
+    """Costo del modelo remoto (extractores B y C1)."""
+    respuesta_valida: bool = True
+    """Falso si el modelo respondió algo que no cumple el esquema."""
 
     @property
     def route_ok(self) -> bool:
@@ -172,6 +178,12 @@ def evaluate_document(
         predicted_type = classification.doc_type.value
     if result is None:
         return DocumentEval(truth, out.route.kind, predicted_type, extractor=extractor)
+    fields = field_evals(truth, result)
+    return DocumentEval(truth, out.route.kind, predicted_type, fields, latency, extractor)
+
+
+def field_evals(truth: DocumentTruth, result: ExtractionResult) -> dict[str, FieldEval]:
+    """Compara los campos que intentan todos los extractores (los del parser de reglas)."""
     fields = {}
     for name in PARSERS[truth.doc_type].fields:
         if name not in truth.fields:
@@ -185,7 +197,23 @@ def evaluate_document(
             predicted=predicted,
             truth=truth.fields[name],
         )
-    return DocumentEval(truth, out.route.kind, predicted_type, fields, latency, extractor)
+    return fields
+
+
+def evaluate_image_result(
+    truth: DocumentTruth, result: ExtractionResult, *, respuesta_valida: bool = True
+) -> DocumentEval:
+    """Evalúa la salida de cualquier extractor de imagen (A, B, C1...) para un documento."""
+    return DocumentEval(
+        truth,
+        RouteKind.IMAGE,
+        None,
+        field_evals(truth, result),
+        result.latency_ms,
+        result.extractor,
+        costo_usd=result.usage.estimated_cost_usd if result.usage else 0.0,
+        respuesta_valida=respuesta_valida,
+    )
 
 
 def evaluate_documents(

@@ -6,7 +6,7 @@ Extracción automática de datos de documentos oficiales mexicanos (CURP, INE, C
 
 ## Estado
 
-En desarrollo, en la **fase 5 de 9**. Ya están:
+En desarrollo, en la **fase 6 de 9**. Ya están:
 
 - el esqueleto del repo, las herramientas, la CI y los esquemas de salida (fase 1);
 - los validadores y la normalización (fase 2): CURP y RFC con dígito verificador, nombres entre documentos, domicilio contra el catálogo de SEPOMEX y antigüedad del comprobante. Las reglas, sus fuentes y lo que no se pudo verificar están en [docs/validaciones.md](docs/validaciones.md);
@@ -15,7 +15,11 @@ En desarrollo, en la **fase 5 de 9**. Ya están:
 - el extractor A y el primer modelo entrenado (fase 5):
   - **OCR + reglas:** Tesseract en español con preprocesamiento en OpenCV (contorno de la hoja, perspectiva, inclinación e iluminación). Lo leído pasa por los mismos parsers que la capa de texto, ahora también para INE y comprobante;
   - **CURP y RFC corregidos** por su estructura y su dígito verificador, y el **código postal** con SEPOMEX y el municipio impreso;
-  - **clasificador de documentos** TF-IDF + regresión logística, comparado con el de palabras clave en [reports/clasificador.md](reports/clasificador.md).
+  - **clasificador de documentos** TF-IDF + regresión logística, comparado con el de palabras clave en [reports/clasificador.md](reports/clasificador.md);
+- los extractores B y C1 en Amazon Bedrock (fase 6), comparados con A sobre los mismos escaneos y fotos, con costo real por documento:
+  - **B, OCR + LLM:** el texto del OCR va a un LLM (Amazon Nova);
+  - **C1, visión:** un modelo multimodal lee la imagen (Amazon Nova o Qwen3-VL);
+  - en los dos, la respuesta tiene esquema fijo, se valida con pydantic y pasa por los mismos validadores que las reglas. Hay un tope de gasto y solo se envían datos sintéticos.
 
 ![Documentos sintéticos de muestra](docs/img/muestras-sinteticas.jpg)
 
@@ -46,6 +50,28 @@ Latencia p50: de 32 a 364 ms por la capa de texto; de 2.4 a 6.8 s por OCR. Costo
 
 El router (texto vs. imagen) acierta en los 300.
 
+**Extractores de imagen comparados** (`make eval-llm`, los mismos 169 escaneos y fotos de test; detalle en [reports/comparacion.md](reports/comparacion.md)). Los modelos se eligieron en val ([reports/comparacion_val.md](reports/comparacion_val.md)):
+
+| Extractor | Documentos 100% correctos | Campos correctos | Latencia p50 | Costo por documento |
+|---|---:|---:|---:|---:|
+| A: OCR + reglas | 53.8% | 72.1% | 2.7 s | $0 |
+| B: OCR + Nova Micro | 27.8% | 70.7% | 3.4 s | $0.00006 |
+| B: OCR + Nova Lite | 37.3% | 73.7% | 3.7 s | $0.00011 |
+| **B: OCR + Nova Pro** (elegido en val) | 50.3% | 77.7% | 4.0 s | $0.00143 |
+| C1: Nova Lite (imagen) | 12.4% | 58.3% | 1.3 s | $0.00019 |
+| C1: Nova Pro (imagen) | 13.6% | 59.3% | 1.9 s | $0.00254 |
+| **C1: Qwen3-VL 235B (imagen)** (elegido en val) | **75.1%** | **95.9%** | 2.6 s | $0.00179 |
+
+Por tipo y modalidad, documentos 100% correctos:
+
+| Documento | A | B: Nova Pro | C1: Qwen3-VL |
+|---|---:|---:|---:|
+| CURP escaneo (22) / foto (5) | 86.4% / 60.0% | 86.4% / 60.0% | 100.0% / 100.0% |
+| CSF escaneo (18) / foto (4) | 77.8% / 25.0% | 77.8% / 25.0% | 77.8% / 50.0% |
+| INE escaneo (27) / foto (45) | 81.5% / 26.7% | 66.7% / 28.9% | 74.1% / 60.0% |
+| Comprobante escaneo (15) / foto (33) | 60.0% / 33.3% | 60.0% / 24.2% | 93.3% / 69.7% |
+| Comprobante de diseño no visto (20) | 30.0% | 35.0% | 90.0% |
+
 Cómo leer estos números:
 
 - **El 100% de los digitales no dice nada de los documentos reales.** Leen la capa de texto que el mismo generador escribió. Lo que sí se mide así es que las reglas no se rompen con nombres compuestos, partículas, Ñ, sin segundo apellido ni números interiores. El dato que importa sale de `make eval-private` con documentos reales: en la última corrida, con una CURP y una CSF reales, todos los campos salieron encontrados y coherentes.
@@ -53,6 +79,11 @@ Cómo leer estos números:
 - **La latencia del OCR se midió con 4 procesos en paralelo** en una PC de 12 hilos. La CURP es la más lenta por su texto legal.
 - **Generalización a un diseño no visto.** El parser genérico de comprobante lee los 14 recibos digitales de teléfono sin una regla escrita para ellos. El clasificador de palabras clave no reconoce ninguno, porque su vocabulario no está en las palabras clave; el entrenado reconoce 32 de 34.
 - **El clasificador se entrenó sin las marcas de lo sintético.** Antes de entrenar se descarta todo renglón con "MUESTRA", "ficticio", "sintético" y similares. Con solo quitar esas palabras, el pie común de los comprobantes ("Empresa y documento...") le daba una pista que no existe en documentos reales, y el diseño no visto subía a 97.1%.
+- **C1 con Qwen3-VL es el mejor extractor de imagen**, sobre todo en fotos y en el diseño de comprobante no visto, donde las reglas no generalizan. Cuesta menos de 2 décimas de centavo de dólar por documento (unos $1.79 por cada 1,000) y responde en menos de 3 s.
+- **B con un LLM no supera a las reglas** con el mismo OCR: si el OCR leyó mal, el LLM no lo arregla, y a veces agrega errores, como confundir los renglones del domicilio. Nova Pro llega al nivel de A en la CURP y la CSF.
+- **C1 con Nova no sirve para estos documentos:** desalinea los renglones del domicilio, deja fechas incompletas y lee mal la CURP.
+- **El costo se midió**, no se estimó: tokens que reporta Bedrock por los precios de la Price List API de AWS (us-east-1, noviembre de 2026). Comparar los 6 modelos en val y test, con el piloto y una corrección del prompt, costó $2.96 USD según los tokens reportados.
+- **Solo modelos que corren en us-east-1**, por restricciones de la cuenta de AWS usada. Claude en Bedrock solo se ofrece con inferencia entre regiones, así que no entró en la comparación; el proveedor es configurable para agregarlo.
 - **En la CURP solo se miden curp, nombre y apellidos**, porque son los únicos campos que la constancia imprime. Sexo, fecha y entidad de nacimiento y nacionalidad se deducen de la CURP.
 
 ## Cómo va a funcionar
@@ -98,10 +129,13 @@ make tessdata  # modelos de Tesseract en español, fijados por SHA-256, en model
 make synth     # dataset sintético en data/synthetic/ (no se versiona)
 make eval      # evaluación en test (OCR en paralelo, con caché en data/cache/ocr/)
 make train-clasificador   # entrena el clasificador y escribe reports/clasificador.md
+make eval-llm  # compara A, B y C1 con Amazon Bedrock (cuesta; tope acumulado de 10 USD)
 make test      # pruebas
 make lint      # ruff
 make help      # todos los objetivos
 ```
+
+`make eval-llm` necesita credenciales de AWS con acceso a Bedrock en us-east-1 (por ejemplo, `aws login`); las pruebas nunca llaman a AWS.
 
 Sin el catálogo de SEPOMEX las pruebas pasan igual: usan un catálogo ficticio, y las dos pruebas contra el catálogo real se omiten. `make synth` sí necesita el catálogo.
 

@@ -8,6 +8,7 @@ license-files = ["LICENSE"]
 authors = [{ name = "LeonelNV" }]
 requires-python = ">=3.11"
 dependencies = [
+    "boto3[crt]>=1.40,<2",
     "numpy>=2.0,<3",
     "opencv-python-headless>=4.10,<5",  # preprocesamiento de fotos (perspectiva, sombras)
     "pdfplumber>=0.11,<0.12",

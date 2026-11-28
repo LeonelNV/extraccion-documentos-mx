@@ -1,0 +1,12 @@
+{
+  "fuente": "AWS Price List API (servicio AmazonBedrock), precios bajo demanda, nivel estándar",
+  "fecha": "2026-11-27",
+  "region": "us-east-1",
+  "moneda": "USD por 1,000 tokens",
+  "modelos": {
+    "amazon.nova-micro-v1:0": {"nombre": "Nova Micro", "vision": false, "entrada_1k": 0.000035, "salida_1k": 0.00014},
+    "amazon.nova-lite-v1:0": {"nombre": "Nova Lite", "vision": true, "entrada_1k": 0.00006, "salida_1k": 0.00024},
+    "amazon.nova-pro-v1:0": {"nombre": "Nova Pro", "vision": true, "entrada_1k": 0.0008, "salida_1k": 0.0032},
+    "qwen.qwen3-vl-235b-a22b": {"nombre": "Qwen3 VL 235B A22B", "vision": true, "entrada_1k": 0.00053, "salida_1k": 0.00266}
+  }
+}

@@ -3,7 +3,7 @@
 # las muestra `make help`.
 
 .DEFAULT_GOAL := help
-.PHONY: help install lint format test check-data ci sepomex verificar-claves tessdata synth synth-samples eval train-clasificador eval-private esqueleto api
+.PHONY: help install lint format test check-data ci sepomex verificar-claves tessdata synth synth-samples eval eval-llm precios-bedrock train-clasificador eval-private esqueleto api
 
 help: ## Muestra esta ayuda
 	@uv run --no-project python scripts/make_help.py Makefile
@@ -45,6 +45,12 @@ synth-samples: ## Regenera las muestras versionadas de data/synthetic/samples/
 
 eval: ## Evalúa texto y OCR (extractor A) sobre el split test y escribe reports/
 	uv run python eval/evaluate.py --split test
+
+eval-llm: ## Compara A, B y C1 en test con Bedrock (cuesta; tope acumulado de 10 USD)
+	uv run python eval/evaluate_llm.py --split test
+
+precios-bedrock: ## Muestra los precios actuales de Bedrock contra src/docextract/llm/precios_bedrock.json
+	uv run python scripts/precios_bedrock.py
 
 train-clasificador: ## Entrena el clasificador TF-IDF + regresión logística y escribe reports/clasificador.md
 	uv run python training/train_clasificador.py

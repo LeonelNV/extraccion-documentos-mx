@@ -30,7 +30,13 @@ from docextract.schemas import DocType, ExtractedField, ExtractionResult, Warnin
 from docextract.validators._common import make_warning
 from docextract.validators.curp import CurpInfo, check_curp_consistency
 
-__all__ = ["CurpParser"]
+__all__ = [
+    "CurpParser",
+    "entidad_vs_curp",
+    "fecha_vs_curp",
+    "nacionalidad_vs_curp",
+    "sexo_vs_curp",
+]
 
 ETIQUETAS: dict[str, tuple[str, ...]] = {
     "nombre": ("Nombre(s)", "Nombres", "Nombre (s)"),
@@ -93,10 +99,10 @@ class CurpParser:
             return layout.value(ETIQUETAS[name], VOCABULARIO)
 
         out.update(self._names(get, curp, info))
-        out["fecha_nacimiento"] = self._fecha(get("fecha_nacimiento"), info)
-        out["sexo"] = self._sexo(get("sexo"), info)
-        out["entidad_nacimiento"] = self._entidad(get("entidad_nacimiento"), info)
-        out["nacionalidad"] = self._nacionalidad(get("nacionalidad"), info)
+        out["fecha_nacimiento"] = fecha_vs_curp(get("fecha_nacimiento"), info)
+        out["sexo"] = sexo_vs_curp(get("sexo"), info)
+        out["entidad_nacimiento"] = entidad_vs_curp(get("entidad_nacimiento"), info)
+        out["nacionalidad"] = nacionalidad_vs_curp(get("nacionalidad"), info)
 
         return ExtractionResult(
             doc_type=DocType.CURP,
@@ -135,55 +141,67 @@ class CurpParser:
                 confidence = Confianza.VALIDADO
         return {k: field(v, confidence, warnings) for k, v in separados.items()}
 
-    def _fecha(self, impresa: str | None, info: CurpInfo | None) -> ExtractedField:
-        if impresa:
-            fecha = parse_date(impresa)
-            if info is None or fecha is None:
-                return field(impresa, Confianza.ETIQUETADO if fecha else Confianza.DUDOSO)
-            if fecha == info.fecha_nacimiento:
-                return field(impresa, Confianza.VALIDADO)
-            return field(
-                impresa,
-                Confianza.INCONSISTENTE,
-                [
-                    make_warning(
-                        WarningCode.CURP_DATOS_NO_COINCIDEN,
-                        "La fecha de nacimiento impresa no coincide con la de la CURP.",
-                        fields=("fecha_nacimiento", "curp"),
-                        docs=(DocType.CURP,),
-                    )
-                ],
-            )
-        if info is not None:
-            return field(info.fecha_nacimiento.isoformat(), Confianza.DERIVADO)
-        return field(None, 0.0)
 
-    def _sexo(self, impreso: str | None, info: CurpInfo | None) -> ExtractedField:
-        if impreso:
-            codigo = _sexo_codigo(impreso)
-            if info is None or codigo is None:
-                return field(impreso, Confianza.ETIQUETADO if codigo else Confianza.DUDOSO)
-            confidence = Confianza.VALIDADO if codigo == info.sexo else Confianza.INCONSISTENTE
-            return field(impreso, confidence)
-        if info is not None:
-            return field(info.sexo, Confianza.DERIVADO)
-        return field(None, 0.0)
+# ---------------------------------------------------------------------------
+# Datos que también dice la CURP (los usan otros extractores)
+# ---------------------------------------------------------------------------
+def fecha_vs_curp(
+    impresa: str | None, info: CurpInfo | None, docs: tuple[DocType, ...] = (DocType.CURP,)
+) -> ExtractedField:
+    """La fecha impresa, validada contra la CURP; si no está impresa, la de la CURP."""
+    if impresa:
+        fecha = parse_date(impresa)
+        if info is None or fecha is None:
+            return field(impresa, Confianza.ETIQUETADO if fecha else Confianza.DUDOSO)
+        if fecha == info.fecha_nacimiento:
+            return field(impresa, Confianza.VALIDADO)
+        return field(
+            impresa,
+            Confianza.INCONSISTENTE,
+            [
+                make_warning(
+                    WarningCode.CURP_DATOS_NO_COINCIDEN,
+                    "La fecha de nacimiento impresa no coincide con la de la CURP.",
+                    fields=("fecha_nacimiento", "curp"),
+                    docs=docs,
+                )
+            ],
+        )
+    if info is not None:
+        return field(info.fecha_nacimiento.isoformat(), Confianza.DERIVADO)
+    return field(None, 0.0)
 
-    def _nacionalidad(self, impresa: str | None, info: CurpInfo | None) -> ExtractedField:
-        """La constancia real no imprime la nacionalidad. Quien nace en territorio
-        mexicano es mexicano por nacimiento (art. 30 constitucional), así que se deduce de la
-        entidad de la CURP. Con ``NE`` (nacido en el extranjero) no se puede deducir."""
-        if impresa:
-            return field(impresa, Confianza.ETIQUETADO)
-        if info is not None and not info.nacido_en_extranjero:
-            return field("MEXICANA", Confianza.DERIVADO)
-        return field(None, 0.0)
 
-    def _entidad(self, impresa: str | None, info: CurpInfo | None) -> ExtractedField:
-        if impresa:
-            return field(impresa, Confianza.ETIQUETADO)
-        if info is not None:
-            entidad = por_clave_curp(info.clave_entidad)
-            nombre = entidad.nombre if entidad else "NACIDO EN EL EXTRANJERO"
-            return field(nombre, Confianza.DERIVADO)
-        return field(None, 0.0)
+def sexo_vs_curp(impreso: str | None, info: CurpInfo | None) -> ExtractedField:
+    """El sexo impreso, validado contra la CURP; si no está impreso, el de la CURP."""
+    if impreso:
+        codigo = _sexo_codigo(impreso)
+        if info is None or codigo is None:
+            return field(impreso, Confianza.ETIQUETADO if codigo else Confianza.DUDOSO)
+        confidence = Confianza.VALIDADO if codigo == info.sexo else Confianza.INCONSISTENTE
+        return field(impreso, confidence)
+    if info is not None:
+        return field(info.sexo, Confianza.DERIVADO)
+    return field(None, 0.0)
+
+
+def nacionalidad_vs_curp(impresa: str | None, info: CurpInfo | None) -> ExtractedField:
+    """La constancia real no imprime la nacionalidad. Quien nace en territorio
+    mexicano es mexicano por nacimiento (art. 30 constitucional), así que se deduce de la
+    entidad de la CURP. Con ``NE`` (nacido en el extranjero) no se puede deducir."""
+    if impresa:
+        return field(impresa, Confianza.ETIQUETADO)
+    if info is not None and not info.nacido_en_extranjero:
+        return field("MEXICANA", Confianza.DERIVADO)
+    return field(None, 0.0)
+
+
+def entidad_vs_curp(impresa: str | None, info: CurpInfo | None) -> ExtractedField:
+    """La entidad de nacimiento impresa; si no está impresa, la de la CURP."""
+    if impresa:
+        return field(impresa, Confianza.ETIQUETADO)
+    if info is not None:
+        entidad = por_clave_curp(info.clave_entidad)
+        nombre = entidad.nombre if entidad else "NACIDO EN EL EXTRANJERO"
+        return field(nombre, Confianza.DERIVADO)
+    return field(None, 0.0)
