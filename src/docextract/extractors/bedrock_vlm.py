@@ -10,6 +10,7 @@ legibilidad de los caracteres chicos; se elige en val.
 from __future__ import annotations
 
 import io
+import threading
 import time
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
@@ -31,6 +32,9 @@ LADO = 1600
 CALIDAD_JPEG = 85
 MAX_PAGINAS = 2
 
+_PDFIUM = threading.Lock()
+"""PDFium no es seguro entre hilos: la evaluación llama a Bedrock en paralelo."""
+
 
 def _jpeg(image: Image, lado: int) -> bytes:
     image = image.convert("RGB")
@@ -47,16 +51,17 @@ def pdf_a_imagenes(pdf: bytes, *, lado: int = LADO, max_paginas: int = MAX_PAGIN
     """Las primeras páginas del PDF como JPEG en color."""
     import pypdfium2 as pdfium
 
-    document = pdfium.PdfDocument(pdf)
-    try:
-        imagenes = []
-        for i in range(min(len(document), max_paginas)):
-            page = document[i]
-            scale = lado / max(page.get_size())
-            imagenes.append(_jpeg(page.render(scale=scale).to_pil(), lado))
-        return imagenes
-    finally:
-        document.close()
+    with _PDFIUM:
+        document = pdfium.PdfDocument(pdf)
+        try:
+            paginas = []
+            for i in range(min(len(document), max_paginas)):
+                page = document[i]
+                scale = lado / max(page.get_size())
+                paginas.append(page.render(scale=scale).to_pil())
+        finally:
+            document.close()
+    return [_jpeg(pagina, lado) for pagina in paginas]
 
 
 class BedrockVlmExtractor:

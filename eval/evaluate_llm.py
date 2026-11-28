@@ -133,20 +133,23 @@ def main(argv: list[str] | None = None) -> int:
     )
     evals: list[DocumentEval] = []
     detenido = None
+    pool = ThreadPoolExecutor(max_workers=args.workers)
     try:
-        with ThreadPoolExecutor(max_workers=args.workers) as pool:
-            futures = [pool.submit(evaluar, x, d) for x in extractores for d in documents]
-            for i, future in enumerate(as_completed(futures), 1):
-                try:
-                    evals.append(future.result())
-                except PresupuestoAgotadoError as error:
-                    detenido = str(error)
-                    for f in futures:
-                        f.cancel()
-                    break
-                if i % 50 == 0 or i == len(futures):
-                    print(f"  {i}/{len(futures)}  ${presupuesto.gastado_usd:.4f}", end="\r")
+        futures = [pool.submit(evaluar, x, d) for x in extractores for d in documents]
+        for i, future in enumerate(as_completed(futures), 1):
+            try:
+                evals.append(future.result())
+            except PresupuestoAgotadoError as error:
+                detenido = str(error)
+                break
+            if i % 50 == 0 or i == len(futures):
+                print(f"  {i}/{len(futures)}  ${presupuesto.gastado_usd:.4f}", end="\r")
+    except BaseException:
+        # Un error inesperado no debe dejar corriendo (y cobrando) lo que falta.
+        pool.shutdown(wait=True, cancel_futures=True)
+        raise
     finally:
+        pool.shutdown(wait=True, cancel_futures=True)
         gasto.guardar(presupuesto.gastado_usd)
     print()
     print(
