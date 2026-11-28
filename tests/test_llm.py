@@ -341,3 +341,42 @@ def test_eval_private_no_usa_bedrock() -> None:
     codigo = (ROOT / "eval" / "eval_private.py").read_text(encoding="utf-8")
     for prohibido in ("docextract.llm", "ocr_llm", "bedrock", "boto3"):
         assert prohibido not in codigo.lower()
+
+
+def test_nombres_intercambiados_se_ordenan_con_la_curp() -> None:
+    # La INE imprime primero los apellidos y el modelo a veces los etiqueta mal.
+    raw = _raw(
+        DocType.INE, curp=CURP, nombre="DEL RIO", apellido_paterno="MAGAÑA",
+        apellido_materno="GERARDO CARLOS",
+    )  # fmt: skip
+    fields = build_fields(DocType.INE, raw, catalog=None)
+    assert {k: fields[k].value for k in NOMBRES} == NOMBRES
+    assert fields["nombre"].confidence == Confianza.VALIDADO
+
+
+@pytest.mark.parametrize(
+    ("leido", "esperado"),
+    [
+        (
+            {"calle": "C HIDALGO 270", "numero_exterior": None, "numero_interior": None},
+            {"calle": "C HIDALGO", "numero_exterior": "270", "numero_interior": ""},
+        ),
+        (
+            {"calle": "C HIDALGO", "numero_exterior": "12", "numero_interior": "INT. LOCAL 2"},
+            {"calle": "C HIDALGO", "numero_exterior": "12", "numero_interior": "LOCAL 2"},
+        ),
+        (
+            {"calle": "C HIDALGO", "numero_exterior": "12", "numero_interior": None},
+            {"calle": "C HIDALGO", "numero_exterior": "12", "numero_interior": ""},
+        ),
+        (
+            {"calle": None, "numero_exterior": None, "numero_interior": None},
+            {"calle": None, "numero_exterior": None, "numero_interior": None},
+        ),
+    ],
+)
+def test_domicilio_con_las_convenciones_de_las_reglas(leido: dict, esperado: dict) -> None:
+    raw = _raw(DocType.COMPROBANTE_DOMICILIO, colonia="FRACC LOS MANGOS", **leido)
+    fields = build_fields(DocType.COMPROBANTE_DOMICILIO, raw, catalog=None)
+    assert {k: fields[k].value for k in esperado} == esperado
+    assert fields["colonia"].value == "LOS MANGOS"

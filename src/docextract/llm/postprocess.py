@@ -5,7 +5,10 @@ ajusta con lo que sí se puede verificar, igual que en los parsers de reglas:
 
 * **CURP y RFC:** dígito verificador. Si no pasa, se intenta la corrección por estructura
   (:mod:`docextract.repair`); si tampoco, el valor queda con ``INVALIDO`` y su advertencia.
-* **Nombre y apellidos:** contra las letras de la CURP del mismo documento.
+* **Nombre y apellidos:** contra las letras de la CURP del mismo documento; si el modelo
+  los intercambió, el orden que reproduce la CURP.
+* **Domicilio:** las convenciones de las reglas (calle sin número, interior ``""`` si no
+  hay, colonia sin prefijo).
 * **Fecha de nacimiento, sexo, entidad y nacionalidad:** contra la CURP o derivados de ella
   si no están impresos (las mismas funciones que el parser de la CURP).
 * **Código postal:** 5 dígitos y, con el catálogo de SEPOMEX, corrección de un dígito con
@@ -15,10 +18,18 @@ ajusta con lo que sí se puede verificar, igual que en los parsers de reglas:
 
 from __future__ import annotations
 
+import itertools
+import re
+
 from docextract.entidades import find_entidad
 from docextract.normalize import clean_identifier, normalize_codigo_postal, parse_date
-from docextract.parsers.address import default_catalog, repair_cp
-from docextract.parsers.base import Confianza, field, find_curp, find_rfc
+from docextract.parsers.address import (
+    PREFIJOS_COLONIA,
+    default_catalog,
+    repair_cp,
+    split_street,
+)
+from docextract.parsers.base import Confianza, field, find_curp, find_rfc, split_full_name
 from docextract.parsers.curp import (
     entidad_vs_curp,
     fecha_vs_curp,
@@ -95,21 +106,7 @@ def build_fields(
         out["rfc"] = _rfc(doc_type, raw["rfc"], curp)
 
     if "nombre" in raw:
-        nombres = {k: raw.get(k) for k in NOMBRE_FIELDS}
-        confidence, warnings = CONFIANZA_MODELO, []
-        # La CURP solo se compara con los tres (el segundo apellido puede ser "").
-        comparable = nombres["nombre"] and nombres["apellido_paterno"]
-        if info is not None and comparable and nombres["apellido_materno"] is not None:
-            warnings = check_curp_consistency(
-                info,
-                nombre=nombres["nombre"],
-                apellido_paterno=nombres["apellido_paterno"],
-                apellido_materno=nombres["apellido_materno"],
-                docs=(doc_type,),
-            )
-            confidence = Confianza.INCONSISTENTE if warnings else Confianza.VALIDADO
-        for name, value in nombres.items():
-            out[name] = field(value, confidence if value is not None else 0.0, warnings)
+        out.update(_nombres(doc_type, raw, curp, info))
 
     # Lo que también dice la CURP. Un valor impreso que coincide sube a VALIDADO; uno que
     # no está impreso se deriva de la CURP (DERIVADO).
@@ -127,7 +124,8 @@ def build_fields(
         if name in out and out[name].confidence == Confianza.ETIQUETADO:
             out[name] = out[name].model_copy(update={"confidence": CONFIANZA_MODELO})
 
-    # Domicilio
+    # Domicilio, con las mismas convenciones que las reglas.
+    raw = _domicilio(raw)
     for name in ("calle", "numero_exterior", "numero_interior", "colonia", "ciudad", "municipio"):
         if name in raw:
             value = raw[name]
@@ -148,6 +146,62 @@ def build_fields(
     for name, value in raw.items():
         out.setdefault(name, field(value, CONFIANZA_MODELO if value is not None else 0.0))
     return out
+
+
+def _nombres(
+    doc_type: DocType, raw: dict[str, str | None], curp: str | None, info
+) -> dict[str, ExtractedField]:
+    """Nombre y apellidos contra la CURP del documento.
+
+    Si no coinciden, se prueba el orden de los tres valores que reproduce las letras de la
+    CURP (``split_full_name``, como el parser de la INE): el modelo a veces intercambia
+    nombre y apellidos, sobre todo en la INE, que imprime primero los apellidos.
+    """
+    nombres = {k: raw.get(k) for k in NOMBRE_FIELDS}
+    # La CURP solo se compara con los tres (el segundo apellido puede ser "").
+    comparable = nombres["nombre"] and nombres["apellido_paterno"]
+    if info is None or not comparable or nombres["apellido_materno"] is None:
+        return {k: field(v, CONFIANZA_MODELO if v is not None else 0.0) for k, v in nombres.items()}
+    warnings = check_curp_consistency(info, **nombres, docs=(doc_type,))
+    if not warnings:
+        return {k: field(v, Confianza.VALIDADO) for k, v in nombres.items()}
+    partes = [v for v in nombres.values() if v]
+    divisiones = set()
+    for orden in itertools.permutations(partes):
+        split, ambiguo = split_full_name(" ".join(orden), curp or "")
+        if split and not ambiguo:
+            divisiones.add(split)
+    if len(divisiones) == 1:
+        split = divisiones.pop()
+        return {k: field(v, Confianza.VALIDADO) for k, v in zip(NOMBRE_FIELDS, split, strict=True)}
+    return {k: field(v, Confianza.INCONSISTENTE, warnings) for k, v in nombres.items()}
+
+
+_PREFIJO_INTERIOR = re.compile(r"^INT(?:ERIOR)?\.?\s*", re.IGNORECASE)
+
+
+def _domicilio(raw: dict[str, str | None]) -> dict[str, str | None]:
+    """Las convenciones de las reglas (:mod:`docextract.parsers.address`):
+
+    * la calle sin el número (si el número exterior vino pegado a la calle, se separa);
+    * el número interior sin "INT", y ``""`` si hay número exterior pero no interior;
+    * la colonia sin prefijo ("COL", "FRACC"...).
+    """
+    raw = dict(raw)
+    calle, exterior = raw.get("calle"), raw.get("numero_exterior")
+    if "numero_exterior" in raw and calle and not exterior and (split := split_street(calle)):
+        raw["calle"], raw["numero_exterior"], interior = split
+        if not raw.get("numero_interior"):
+            raw["numero_interior"] = interior
+    if "numero_interior" in raw:
+        interior = raw["numero_interior"]
+        if interior:
+            raw["numero_interior"] = _PREFIJO_INTERIOR.sub("", interior).strip(" ,.")
+        elif interior is None and raw.get("numero_exterior"):
+            raw["numero_interior"] = ""
+    if raw.get("colonia"):
+        raw["colonia"] = PREFIJOS_COLONIA.sub("", raw["colonia"]).strip(" ,")
+    return raw
 
 
 def _codigo_postal(raw: dict[str, str | None], catalog) -> ExtractedField:

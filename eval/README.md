@@ -25,6 +25,41 @@ Por cada documento del split mide:
   - latencia p50/p95 (lectura del PDF, OCR si aplica, clasificación y parser);
   - costo, que es $0 para las reglas.
 
+## `make eval-llm`: extractores A, B y C1 con Amazon Bedrock
+
+```bash
+make eval-llm                                                   # split test: lo que se reporta
+uv run python eval/evaluate_llm.py --split val                  # elegir modelos (escribe comparacion_val.md)
+uv run python eval/evaluate_llm.py --split val --limite 8 --errores 50   # piloto barato
+```
+
+Compara sobre los mismos escaneos y fotos:
+
+- **A** (`ocr_reglas`): OCR + reglas, sin costo;
+- **B** (`ocr_llm/<modelo>`): el texto del mismo OCR va a un LLM;
+- **C1** (`bedrock_vlm/<modelo>`): un modelo multimodal lee la imagen (JPEG en color, 1600 px).
+
+B y C1 piden los mismos campos que las reglas, con la herramienta forzada (salida JSON con
+esquema), validan la respuesta con pydantic y pasan cada valor por los mismos validadores
+(dígitos verificadores, CURP contra el nombre, SEPOMEX). Solo usan modelos que corren en
+us-east-1.
+
+**Costo.** Cada llamada se cobra con los tokens que reporta Bedrock y los precios de
+`src/docextract/llm/precios_bedrock.json` (Price List API, con fecha). `make precios-bedrock`
+los compara con los actuales.
+
+**Tope de gasto.** `--presupuesto` (10 USD por omisión) es acumulado entre corridas: el gasto
+se lleva en `data/cache/llm/gasto.json`. Antes de cada llamada se aparta el peor caso y, si
+pasaría el tope, la corrida se detiene. Las respuestas se guardan en `data/cache/llm/` por
+hash de la petición: repetir una corrida no cuesta.
+
+**Solo datos sintéticos.** El script se niega a leer documentos fuera de `data/synthetic/`, y
+`eval-private` no llama a Bedrock (lo verifican las pruebas). Necesita credenciales de AWS
+(por ejemplo, `aws login`); la CI nunca llama a AWS.
+
+Escribe `reports/comparacion.md` y `.csv` (test) o `reports/comparacion_val.*` (val), más el
+detalle en `reports/runs/`. Los modelos se eligen en val; test solo reporta.
+
 ## `make train-clasificador`: el clasificador entrenado
 
 Entrena TF-IDF + regresión logística con el texto de train (capa de texto u OCR), elige la

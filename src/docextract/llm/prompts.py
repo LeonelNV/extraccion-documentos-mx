@@ -33,7 +33,7 @@ __all__ = [
     "validar",
 ]
 
-PROMPT_VERSION = "1"
+PROMPT_VERSION = "2"
 """Cambia si cambian las instrucciones o los esquemas (invalida la caché)."""
 
 NOMBRES_DOCUMENTO = {
@@ -68,7 +68,10 @@ DESCRIPCIONES: dict[str, str] = {
     "sexo": "Sexo: H, M o X, como aparece.",
     "entidad_nacimiento": "Entidad federativa de nacimiento, solo si aparece impresa.",
     "nacionalidad": "Nacionalidad, solo si aparece impresa.",
-    "calle": "Tipo y nombre de la vialidad, sin el número (p. ej. CALLE HIDALGO, AV REFORMA).",
+    "calle": (
+        "Calle completa con su tipo de vialidad tal como aparece (C, CALLE, AV, AND...), sin "
+        "el número (p. ej. C HIDALGO, AV REFORMA)."
+    ),
     "numero_exterior": 'Número exterior; "SN" si dice sin número.',
     "numero_interior": 'Número interior, sin la palabra INT; "" si no tiene.',
     "colonia": "Colonia o asentamiento, sin el prefijo COL.",
@@ -91,11 +94,19 @@ DESCRIPCIONES_POR_DOCUMENTO: dict[DocType, dict[str, str]] = {
         "estado": "Nombre de la entidad federativa.",
     },
     DocType.CURP: {
-        "nombre": "Nombre o nombres de pila, sin apellidos (el nombre completo suele venir "
-        "en una línea: sepáralo).",
+        "nombre": (
+            "Nombre o nombres de pila. La constancia imprime el nombre completo en una línea, "
+            "en este orden: nombre(s), primer apellido, segundo apellido."
+        ),
     },
     DocType.INE: {
-        "calle": "Calle del domicilio, sin el número.",
+        "nombre": (
+            "Nombre o nombres de pila. Bajo NOMBRE, la credencial imprime en renglones "
+            "separados y en este orden: primer apellido, segundo apellido y nombre(s)."
+        ),
+        "apellido_paterno": "Primer apellido: el primer renglón bajo NOMBRE.",
+        "apellido_materno": 'Segundo apellido: el segundo renglón bajo NOMBRE; "" si no hay.',
+        "calle": "Primer renglón bajo DOMICILIO, con su tipo (C, AV, AND...), sin el número.",
         "ciudad": "Municipio o ciudad (la línea que sigue a la colonia, antes del estado).",
     },
 }
